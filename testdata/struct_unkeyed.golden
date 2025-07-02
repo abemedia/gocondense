@@ -1,0 +1,11 @@
+package main
+
+type Person struct {
+	Name string
+	Age  int
+}
+
+func main() {
+	p := Person{"John", 30}
+	println(p.Name)
+}

@@ -1,0 +1,5 @@
+package main
+
+func calculate(x, y int) (sum, diff int) {
+	return x + y, x - y
+}

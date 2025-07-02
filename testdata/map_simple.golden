@@ -1,0 +1,6 @@
+package main
+
+func main() {
+	p := map[string]string{"name": "John", "age": 30}
+	println(p["name"])
+}

@@ -1,0 +1,23 @@
+package main
+
+type receiver[
+	A string,
+	B int,
+	C bool,
+] struct{}
+
+func (r *receiver[
+	A,
+	B,
+	C,
+]) Example(
+	a string,
+	b int,
+	c bool,
+) (
+	string,
+	int,
+	bool,
+) {
+	return a, b, c
+}

@@ -1,0 +1,15 @@
+package main
+
+// Function with comments in different sections
+func Process[
+  T comparable, // type constraint comment
+  U any,
+](
+  data T, // input data
+  processor func(T) U,
+) (
+  result U, // processed result
+  err error,
+) {
+  return processor(data), nil
+}

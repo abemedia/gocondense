@@ -1,0 +1,9 @@
+package main
+
+func main() {
+	p := map[string]string{
+		"veryLongMapKeyToAvoidCondensingOntoASingleLine":        "veryLongMapValueToAvoidCondensingOntoASingleLine",
+		"anotherVeryLongMapKeyToAvoidCondensingOntoASingleLine": "anotherVeryLongMapValueToAvoidCondensingOntoASingleLine",
+	}
+	println(p["veryLongMapKeyToAvoidCondensingOntoASingleLine"])
+}

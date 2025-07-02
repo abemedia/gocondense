@@ -1,0 +1,10 @@
+package main
+
+func main() {
+	result := fmt.Printf(
+		"Numbers: %d, %d",
+		1,
+		2,
+	)
+	println(result)
+}

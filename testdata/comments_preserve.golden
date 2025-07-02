@@ -1,0 +1,9 @@
+package main
+
+import (
+	"fmt" // comment prevents condensing
+)
+
+func main() {
+	fmt.Println("hello")
+}

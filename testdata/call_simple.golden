@@ -1,0 +1,6 @@
+package main
+
+func main() {
+	result := min(1, 2)
+	println(result)
+}

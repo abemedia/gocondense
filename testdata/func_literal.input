@@ -1,0 +1,10 @@
+package main
+
+func main() {
+	f := func(
+		x int,
+	) int {
+		return x * 2
+	}
+	println(f(5))
+}

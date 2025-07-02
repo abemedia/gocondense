@@ -1,0 +1,61 @@
+version: '2'
+
+issues:
+  fix: true
+
+linters:
+  default: all
+  disable:
+    - depguard
+    - err113
+    - exhaustive
+    - exhaustruct
+    - forcetypeassert
+    - gochecknoglobals
+    - gocyclo
+    - mnd
+    - nlreturn
+    - noinlineerr
+    - paralleltest
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    cyclop:
+      max-complexity: 20
+    govet:
+      enable-all: true
+      disable: [fieldalignment]
+    nolintlint:
+      require-specific: true
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters: [errcheck, funlen]
+        path: (.+)_test.go
+      - linters: [govet]
+        text: 'shadow: declaration of "err" shadows declaration'
+    paths:
+      - testdata
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: interface{}
+          replacement: any
+    gofumpt:
+      extra-rules: true
+    golines:
+      max-len: 120
+      tab-len: 2

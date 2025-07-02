@@ -1,0 +1,11 @@
+package main
+
+// This function signature is very long and should not be condensed due to max length
+func veryLongFunctionNameWithManyParametersAndReturnValues(
+	firstParameter string,
+	secondParameter int,
+	thirdParameter bool,
+	fourthParameter float64,
+) (string, int, bool, float64, error) {
+	return firstParameter, secondParameter, thirdParameter, fourthParameter, nil
+}

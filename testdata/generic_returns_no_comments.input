@@ -1,0 +1,17 @@
+package main
+
+func Example[
+	A string,
+	B int, // this is an int
+	C bool,
+](
+	a string,
+	b int, // this is an int
+	c bool,
+) (
+	string,
+	int,
+	bool,
+) {
+	return a, b, c
+}

@@ -1,0 +1,72 @@
+# https://taskfile.dev
+
+version: '3'
+
+env:
+  CGO_ENABLED: '0'
+
+vars:
+  GIT_COMMIT:
+    sh: git log -n 1 --format="%h (%ci)"
+
+tasks:
+  default:
+    desc: Runs the default tasks
+    cmds:
+      - task: init
+      - task: mod
+      - task: lint
+      - task: test
+      - task: build
+
+  init:
+    desc: Setup git hooks
+    cmds:
+      - cp -f scripts/pre-commit.sh .git/hooks/pre-commit
+
+  mod:
+    desc: Download Go modules
+    cmds:
+      - go mod tidy
+
+  build:
+    desc: Build the binary
+    aliases: [b]
+    sources:
+      - ./**/*.go
+      - ./go.{mod,sum}
+    generates:
+      - ./dist/gocondense
+    cmds:
+      - go build -o ./dist/gocondense -ldflags="-X 'main.version={{.GIT_COMMIT}}'"
+
+  lint:
+    desc: Run golangci-lint
+    aliases: [l]
+    sources:
+      - './**/*.go'
+      - ./go.{mod,sum}
+      - .golangci.yml
+    cmds:
+      - golangci-lint run --fix
+
+  test:
+    desc: Run test suite
+    aliases: [t]
+    cmds:
+      - gotestsum -- -cover ./...
+
+  golden:
+    desc: Update golden test files
+    aliases: [g]
+    cmds:
+      - go test -update ./...
+
+  install:
+    desc: Install gocondense
+    aliases: [i]
+    sources:
+      - './**/*.go'
+      - ./go.{mod,sum}
+    cmds:
+      - go install -ldflags="-X 'main.version={{.GIT_COMMIT}}'" ./cmd/gocondense

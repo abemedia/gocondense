@@ -1,0 +1,27 @@
+package main
+
+type Data struct {
+	Values []string
+	Count  int
+}
+
+func main() {
+	data := []Data{
+		{
+			Values: []string{
+				"a",
+				"b",
+			},
+			Count: 2,
+		},
+		{
+			Values: []string{
+				"x",
+				"y",
+				"z",
+			},
+			Count: 3,
+		},
+	}
+	println(len(data))
+}
