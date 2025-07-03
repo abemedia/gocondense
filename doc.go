@@ -3,7 +3,7 @@
 // readability and respecting specified formatting constraints.
 //
 // The formatter can process various Go constructs including:
-//   - Import declarations: Convert multi-line imports to single-line
+//   - Declaration groups: Convert multi-line single-item declarations to single-line
 //   - Function signatures: Condense parameter lists and return values
 //   - Function literals: Compact anonymous function definitions
 //   - Struct literals: Convert multi-line struct initialization to single-line

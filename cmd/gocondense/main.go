@@ -21,15 +21,15 @@ import (
 )
 
 var features = map[string]gocondense.Feature{
-	"imports":  gocondense.Imports,
-	"types":    gocondense.Types,
-	"funcs":    gocondense.Funcs,
-	"literals": gocondense.Literals,
-	"calls":    gocondense.Calls,
-	"structs":  gocondense.Structs,
-	"slices":   gocondense.Slices,
-	"maps":     gocondense.Maps,
-	"all":      gocondense.All,
+	"declarations": gocondense.Declarations,
+	"types":        gocondense.Types,
+	"funcs":        gocondense.Funcs,
+	"literals":     gocondense.Literals,
+	"calls":        gocondense.Calls,
+	"structs":      gocondense.Structs,
+	"slices":       gocondense.Slices,
+	"maps":         gocondense.Maps,
+	"all":          gocondense.All,
 }
 
 //nolint:cyclop,funlen,gocognit

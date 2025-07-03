@@ -1,0 +1,19 @@
+package main
+
+import (
+	"fmt"
+)
+
+var (
+	message = "hello"
+)
+
+const (
+	pi = 3.14
+)
+
+type (
+	UserID int
+)
+
+func main() {}

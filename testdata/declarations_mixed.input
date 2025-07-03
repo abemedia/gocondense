@@ -1,0 +1,19 @@
+package main
+
+var (
+	x, y = 1, 2
+)
+
+const (
+	A, B string = "a", "b"
+)
+
+var (
+	name string = "test"
+)
+
+const (
+	count int = 42
+)
+
+func main() {}

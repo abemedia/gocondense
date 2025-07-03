@@ -14,7 +14,6 @@ A configurable Go code formatter that condenses multi-line constructs into singl
 - **Flexible Limits**: Set maximum line length and item count globally or per-feature
 - **Preserves Comments**: All comments are preserved in their original positions
 - **Semantic Safety**: No changes to code semantics or behavior
-- **Multiple Constructs**: Supports imports, functions, literals, structs, slices, maps, and calls
 - **CLI and Library**: Available as both a command-line tool and Go library
 
 ## Installation
@@ -33,9 +32,9 @@ go get github.com/abemedia/gocondense
 
 ## Supported Constructs
 
-### Import Declarations
+### Declaration Groups
 
-Condenses single import declarations from multi-line to single-line format.
+Condenses single-item declaration groups (import, var, const, type) from multi-line to single-line format.
 
 **Before:**
 
@@ -43,15 +42,31 @@ Condenses single import declarations from multi-line to single-line format.
 import (
     "fmt"
 )
+
+var (
+    x = 1
+)
+
+const (
+    Name = "value"
+)
+
+type (
+    ID int
+)
 ```
 
 **After:**
 
 ```go
 import "fmt"
-```
 
-**Note:** Only single imports are condensed. Multi-import blocks are left unchanged to maintain readability.
+var x = 1
+
+const Name = "value"
+
+type ID int
+```
 
 ---
 
@@ -311,24 +326,24 @@ cat myfile.go | gocondense
 
 You can override global settings for specific features:
 
-| Flag                   | Description                                  |
-| ---------------------- | -------------------------------------------- |
-| `--imports.max-len`    | Override max-len for imports                 |
-| `--imports.max-items`  | Override max-items for imports               |
-| `--types.max-len`      | Override max-len for type parameters         |
-| `--types.max-items`    | Override max-items for type parameters       |
-| `--funcs.max-len`      | Override max-len for function declarations   |
-| `--funcs.max-items`    | Override max-items for function declarations |
-| `--literals.max-len`   | Override max-len for function literals       |
-| `--literals.max-items` | Override max-items for function literals     |
-| `--calls.max-len`      | Override max-len for function calls          |
-| `--calls.max-items`    | Override max-items for function calls        |
-| `--structs.max-len`    | Override max-len for struct literals         |
-| `--structs.max-items`  | Override max-items for struct literals       |
-| `--slices.max-len`     | Override max-len for slice literals          |
-| `--slices.max-items`   | Override max-items for slice literals        |
-| `--maps.max-len`       | Override max-len for map literals            |
-| `--maps.max-items`     | Override max-items for map literals          |
+| Flag                       | Description                                  |
+| -------------------------- | -------------------------------------------- |
+| `--declarations.max-len`   | Override max-len for declarations            |
+| `--declarations.max-items` | Override max-items for declarations          |
+| `--types.max-len`          | Override max-len for type parameters         |
+| `--types.max-items`        | Override max-items for type parameters       |
+| `--funcs.max-len`          | Override max-len for function declarations   |
+| `--funcs.max-items`        | Override max-items for function declarations |
+| `--literals.max-len`       | Override max-len for function literals       |
+| `--literals.max-items`     | Override max-items for function literals     |
+| `--calls.max-len`          | Override max-len for function calls          |
+| `--calls.max-items`        | Override max-items for function calls        |
+| `--structs.max-len`        | Override max-len for struct literals         |
+| `--structs.max-items`      | Override max-items for struct literals       |
+| `--slices.max-len`         | Override max-len for slice literals          |
+| `--slices.max-items`       | Override max-items for slice literals        |
+| `--maps.max-len`           | Override max-len for map literals            |
+| `--maps.max-items`         | Override max-items for map literals          |
 
 ### Examples
 
@@ -350,10 +365,10 @@ gocondense --max-items 3 myfile.go
 gocondense --enable calls,structs myfile.go
 ```
 
-**Condense everything except imports:**
+**Condense everything except declarations:**
 
 ```bash
-gocondense --disable imports myfile.go
+gocondense --disable declarations myfile.go
 ```
 
 **Allow more items for function calls than other constructs:**
@@ -370,7 +385,7 @@ gocondense --max-len 80 --structs.max-len 120 myfile.go
 
 ### Available Features
 
-- `imports` - Import declarations
+- `declarations` - Declaration groups (import, var, const, type)
 - `types` - Type parameters and instantiations
 - `funcs` - Function declarations
 - `literals` - Function literals
@@ -453,10 +468,10 @@ config := &gocondense.Config{
     Enable: gocondense.Funcs | gocondense.Calls, // Only functions and calls
 }
 
-// Enable all except imports
+// Enable all except declarations
 config := &gocondense.Config{
     MaxLen: 80,
-    Enable: gocondense.All &^ gocondense.Imports, // All except imports
+    Enable: gocondense.All &^ gocondense.Declarations, // All except declarations
 }
 ```
 

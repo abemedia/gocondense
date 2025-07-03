@@ -1,0 +1,11 @@
+package main
+
+import f "fmt"
+
+var msg string = "hello"
+
+const PI float64 = 3.14159
+
+type StringAlias = string
+
+func main() {}
