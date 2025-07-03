@@ -1,0 +1,17 @@
+package main
+
+func main() {
+	numbers := [3]int{
+		1,
+		2,
+		3,
+	}
+
+	fruits := [...]string{
+		"apple",
+		"banana",
+		"cherry",
+	}
+
+	println(len(numbers), len(fruits))
+}
