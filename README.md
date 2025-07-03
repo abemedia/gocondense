@@ -3,6 +3,7 @@
 <img align="right" width="200" alt="" src="assets/logo.png">
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/abemedia/gocondense.svg)](https://pkg.go.dev/github.com/abemedia/gocondense)
+[![Codecov](https://codecov.io/gh/abemedia/gocondense/branch/master/graph/badge.svg)](https://codecov.io/gh/abemedia/gocondense)
 [![CI](https://github.com/abemedia/gocondense/actions/workflows/test.yml/badge.svg)](https://github.com/abemedia/gocondense/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/abemedia/gocondense)](https://goreportcard.com/report/github.com/abemedia/gocondense)
 
