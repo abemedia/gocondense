@@ -419,8 +419,18 @@ func (f *Formatter) analyzeTypeDecl(fset *token.FileSet, file *ast.File, decl *a
 	var replacements []replacement
 
 	for _, spec := range decl.Specs {
-		if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.TypeParams != nil {
+		typeSpec := spec.(*ast.TypeSpec)
+
+		// Handle generic type parameters
+		if typeSpec.TypeParams != nil {
 			if r := f.analyzeFieldList(fset, file, typeSpec.TypeParams, '[', ']', Types); r != nil {
+				replacements = append(replacements, *r)
+			}
+		}
+
+		// Handle struct type declarations
+		if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+			if r := f.analyzeStructTypeDecl(fset, file, structType); r != nil {
 				replacements = append(replacements, *r)
 			}
 		}
@@ -645,4 +655,65 @@ func (f *Formatter) exprToString(fset *token.FileSet, expr ast.Node) string {
 		return "" // Return empty string on error
 	}
 	return buf.String()
+}
+
+// analyzeStructTypeDecl analyzes struct type declarations for condensing.
+func (f *Formatter) analyzeStructTypeDecl(
+	fset *token.FileSet,
+	file *ast.File,
+	structType *ast.StructType,
+) *replacement {
+	if structType.Fields == nil {
+		return nil
+	}
+
+	fieldCount := len(structType.Fields.List)
+	if fieldCount > 1 {
+		return nil // Only handle empty or single-field structs
+	}
+
+	start := fset.Position(structType.Pos())
+	end := fset.Position(structType.End())
+
+	if start.Line == end.Line {
+		return nil // Already single-line
+	}
+
+	if fieldCount == 1 && structType.Fields.List[0].Tag != nil {
+		return nil // Skip if field has a tag
+	}
+
+	if f.hasCommentsInRange(file, structType.Pos(), structType.End()) {
+		return nil
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("struct{")
+
+	if fieldCount == 1 {
+		field := structType.Fields.List[0]
+		buf.WriteString(" ")
+		for j, name := range field.Names {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(name.Name)
+		}
+		if field.Type != nil {
+			if len(field.Names) > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(f.exprToString(fset, field.Type))
+		}
+	}
+
+	buf.WriteString(" }")
+
+	return &replacement{
+		start:   start.Offset,
+		end:     end.Offset,
+		text:    buf.Bytes(),
+		feature: Structs,
+		items:   fieldCount,
+	}
 }
