@@ -1,0 +1,15 @@
+package main
+
+func main() {
+	var (
+		message = "hello"
+	)
+
+	const (
+		pi = 3.14
+	)
+
+	type (
+		UserID int
+	)
+}

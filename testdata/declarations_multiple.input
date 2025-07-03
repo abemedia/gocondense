@@ -1,0 +1,23 @@
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+var (
+	a = 1
+	b = 2
+)
+
+const (
+	X = "x"
+	Y = "y"
+)
+
+type (
+	Int int
+	String string
+)
+
+func main() {}

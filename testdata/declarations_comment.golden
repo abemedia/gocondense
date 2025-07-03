@@ -1,0 +1,19 @@
+package main
+
+import (
+	"fmt" // formatting library
+)
+
+var (
+	greeting = "hello" // welcome message
+)
+
+const (
+	version = "1.0" // app version
+)
+
+type (
+	ID int // user identifier
+)
+
+func main() {}

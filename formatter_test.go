@@ -63,11 +63,11 @@ func TestFormatWithConfig(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "disabled_imports",
+			name: "disabled_declarations",
 			config: &gocondense.Config{
 				MaxLen:   120,
 				TabWidth: 4,
-				Enable:   gocondense.All &^ gocondense.Imports,
+				Enable:   gocondense.All &^ gocondense.Declarations,
 			},
 			input: `package main
 

@@ -19,14 +19,32 @@ type Feature uint
 func (f Feature) has(flag Feature) bool { return f&flag != 0 }
 
 const (
-	// Imports enables condensing of multi-line import declarations into single-line imports.
-	// This converts import blocks like:
+	// Declarations enables condensing of single-item declaration groups into simple declarations.
+	// This converts declaration groups like:
 	//   import (
 	//       "fmt"
 	//   )
+	//
+	//   var (
+	//       x = 1
+	//   )
+	//
+	//   const (
+	//       Name = "value"
+	//   )
+	//
+	//   type (
+	//       ID int
+	//   )
 	// into:
 	//   import "fmt"
-	Imports Feature = 1 << iota
+	//
+	//   var x = 1
+	//
+	//   const Name = "value"
+	//
+	//   type ID int
+	Declarations Feature = 1 << iota
 
 	// Types enables condensing of multi-line type declarations, including generic type parameters.
 	// This converts type parameter lists like:
@@ -106,7 +124,7 @@ const (
 	Maps
 
 	// All enables condensing of all supported constructs.
-	All = Imports | Types | Funcs | Literals | Calls | Structs | Slices | Maps
+	All = Declarations | Types | Funcs | Literals | Calls | Structs | Slices | Maps
 )
 
 // Config holds the configuration settings for the Go code formatter.
@@ -129,7 +147,7 @@ type Config struct {
 	TabWidth int
 
 	// Enable specifies which formatting features are active using bitwise flags.
-	// Use combinations like (Imports | Funcs) to enable specific features,
+	// Use combinations like (Declarations | Funcs) to enable specific features,
 	// or All to enable everything.
 	// If 0, the DefaultConfig.Enable value is used instead.
 	Enable Feature
@@ -246,15 +264,12 @@ func (f *Formatter) processFile(src []byte, file *ast.File) []byte {
 
 		switch n := node.(type) {
 		case *ast.GenDecl:
-			switch n.Tok {
-			case token.IMPORT:
-				if f.config.Enable.has(Imports) {
-					replacements = append(replacements, f.analyzeImportDecl(n)...)
-				}
-			case token.TYPE:
-				if f.config.Enable.has(Types) {
-					replacements = append(replacements, f.analyzeTypeDecl(n)...)
-				}
+			if f.config.Enable.has(Declarations) {
+				replacements = append(replacements, f.analyzeDeclGroup(n)...)
+			}
+			// Handle struct type declarations and generic type parameters
+			if n.Tok == token.TYPE && f.config.Enable.has(Types) {
+				replacements = append(replacements, f.analyzeTypeDecl(n)...)
 			}
 		case *ast.IndexListExpr:
 			if f.config.Enable.has(Types) {
@@ -374,36 +389,66 @@ type replacement struct {
 	items      int
 }
 
-// analyzeImportDecl analyzes import declarations for condensing.
-func (f *Formatter) analyzeImportDecl(decl *ast.GenDecl) []replacement {
+// analyzeDeclGroup analyzes declaration groups for condensing.
+func (f *Formatter) analyzeDeclGroup(decl *ast.GenDecl) []replacement {
 	if len(decl.Specs) != 1 {
-		return nil // Only condense single imports
+		return nil // Only condense single-item declaration groups.
 	}
 
 	if f.hasCommentsInRange(decl.Pos(), decl.End()) {
 		return nil
 	}
 
-	spec := decl.Specs[0].(*ast.ImportSpec)
 	var buf bytes.Buffer
-	buf.WriteString("import ")
+	buf.WriteString(decl.Tok.String())
+	buf.WriteString(" ")
 
-	if spec.Name != nil {
+	switch spec := decl.Specs[0].(type) {
+	case *ast.ImportSpec: // import
+		if spec.Name != nil {
+			buf.WriteString(spec.Name.Name)
+			buf.WriteString(" ")
+		}
+		buf.WriteString(spec.Path.Value)
+
+	case *ast.TypeSpec: // type
 		buf.WriteString(spec.Name.Name)
-		buf.WriteString(" ")
+		if spec.Assign.IsValid() {
+			buf.WriteString(" = ")
+		} else {
+			buf.WriteString(" ")
+		}
+		buf.WriteString(f.exprToString(spec.Type))
+
+	case *ast.ValueSpec: // var, const
+		for i, name := range spec.Names {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(name.Name)
+		}
+		if spec.Type != nil {
+			buf.WriteString(" ")
+			buf.WriteString(f.exprToString(spec.Type))
+		}
+		if len(spec.Values) > 0 {
+			buf.WriteString(" = ")
+			for i, value := range spec.Values {
+				if i > 0 {
+					buf.WriteString(", ")
+				}
+				buf.WriteString(f.exprToString(value))
+			}
+		}
 	}
 
-	buf.WriteString(spec.Path.Value)
-
-	return []replacement{
-		{
-			start:   f.fset.Position(decl.Pos()).Offset,
-			end:     f.fset.Position(decl.End()).Offset,
-			text:    buf.Bytes(),
-			feature: Imports,
-			items:   1,
-		},
-	}
+	return []replacement{{
+		start:   f.fset.Position(decl.Pos()).Offset,
+		end:     f.fset.Position(decl.End()).Offset,
+		text:    buf.Bytes(),
+		feature: Declarations,
+		items:   1,
+	}}
 }
 
 // analyzeTypeDecl analyzes type declarations for condensing.
