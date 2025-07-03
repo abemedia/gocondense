@@ -1,0 +1,13 @@
+package main
+
+type GenericStruct[T any, U comparable] struct {
+	Field T
+}
+
+type GenericFunc[T any, U comparable] func(T, U) bool
+
+type GenericInterface[T any, U comparable] interface {
+	Method(T) U
+}
+
+func main() {}

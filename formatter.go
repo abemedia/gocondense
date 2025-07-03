@@ -63,21 +63,27 @@ const (
 	//       b int,
 	//   ) (
 	//       result int,
-	//   ) {}
+	//   ) {
+	//       return a + b
+	//   }
 	// into:
-	//   func Add(a int, b int) (result int) {}
+	//   func Add(a int, b int) (result int) {
+	//       return a + b
+	//   }
 	Funcs
 
 	// Literals enables condensing of multi-line function literals (anonymous functions).
 	// This converts function literals like:
-	//   func(
+	//   add := func(
 	//       x int,
 	//       y int,
 	//   ) int {
 	//       return x + y
 	//   }
 	// into:
-	//   func(x int, y int) int { return x + y }
+	//   add := func(x int, y int) int {
+	//       return x + y
+	//   }
 	Literals
 
 	// Calls enables condensing of multi-line function call expressions.
@@ -194,11 +200,8 @@ func Format(src []byte) ([]byte, error) {
 }
 
 // Formatter handles the Go code condensing process using the specified configuration.
-// It maintains internal state for parsing and processing source code transformations.
 type Formatter struct {
-	config   *Config
-	fset     *token.FileSet
-	comments []*ast.CommentGroup
+	config *Config
 }
 
 // New creates a new formatter instance with the given configuration.
@@ -222,20 +225,18 @@ func New(config *Config) *Formatter {
 //
 // Returns the formatted source code or an error if parsing or formatting fails.
 func (f *Formatter) Format(src []byte) ([]byte, error) {
-	f.fset = token.NewFileSet()
+	fset := token.NewFileSet()
 
 	maxPasses := 10 // Prevent infinite loops
 
 	// Run multiple passes until no more changes are made.
 	for range maxPasses {
-		file, err := parser.ParseFile(f.fset, "", src, parser.ParseComments)
+		file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse source: %w", err)
 		}
 
-		f.comments = file.Comments
-
-		result := f.processFile(src, file)
+		result := f.processFile(fset, file, src)
 
 		if bytes.Equal(src, result) {
 			break // If no changes were made, we're done.
@@ -250,7 +251,7 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 // processFile walks the AST and applies transformations using string replacement.
 //
 //nolint:cyclop,gocognit
-func (f *Formatter) processFile(src []byte, file *ast.File) []byte {
+func (f *Formatter) processFile(fset *token.FileSet, file *ast.File, src []byte) []byte {
 	var replacements []replacement
 
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -258,38 +259,38 @@ func (f *Formatter) processFile(src []byte, file *ast.File) []byte {
 			return true
 		}
 
-		if f.fset.Position(node.Pos()).Line == f.fset.Position(node.End()).Line {
+		if fset.Position(node.Pos()).Line == fset.Position(node.End()).Line {
 			return false // Skip nodes that are already single-line.
 		}
 
 		switch n := node.(type) {
 		case *ast.GenDecl:
 			if f.config.Enable.has(Declarations) {
-				replacements = append(replacements, f.analyzeDeclGroup(n)...)
+				replacements = append(replacements, f.analyzeDeclGroup(fset, file, n)...)
 			}
 			// Handle struct type declarations and generic type parameters
 			if n.Tok == token.TYPE && f.config.Enable.has(Types) {
-				replacements = append(replacements, f.analyzeTypeDecl(n)...)
+				replacements = append(replacements, f.analyzeTypeDecl(fset, file, n)...)
 			}
 		case *ast.IndexListExpr:
 			if f.config.Enable.has(Types) {
-				replacements = append(replacements, f.analyzeIndexListExpr(n)...)
+				replacements = append(replacements, f.analyzeIndexListExpr(fset, file, n)...)
 			}
 		case *ast.FuncDecl:
 			if f.config.Enable.has(Funcs) {
-				replacements = append(replacements, f.analyzeFuncType(n.Type, Funcs)...)
+				replacements = append(replacements, f.analyzeFuncType(fset, file, n.Type, Funcs)...)
 			}
 		case *ast.FuncLit:
 			if f.config.Enable.has(Literals) {
-				replacements = append(replacements, f.analyzeFuncType(n.Type, Literals)...)
+				replacements = append(replacements, f.analyzeFuncType(fset, file, n.Type, Literals)...)
 			}
 		case *ast.CallExpr:
 			if f.config.Enable.has(Calls) {
-				replacements = append(replacements, f.analyzeCallExpr(n)...)
+				replacements = append(replacements, f.analyzeCallExpr(fset, file, n)...)
 			}
 		case *ast.CompositeLit:
 			if f.config.Enable.has(Structs) || f.config.Enable.has(Slices) || f.config.Enable.has(Maps) {
-				replacements = append(replacements, f.analyzeCompositeLit(n)...)
+				replacements = append(replacements, f.analyzeCompositeLit(fset, file, n)...)
 			}
 		}
 
@@ -390,61 +391,23 @@ type replacement struct {
 }
 
 // analyzeDeclGroup analyzes declaration groups for condensing.
-func (f *Formatter) analyzeDeclGroup(decl *ast.GenDecl) []replacement {
+func (f *Formatter) analyzeDeclGroup(fset *token.FileSet, file *ast.File, decl *ast.GenDecl) []replacement {
 	if len(decl.Specs) != 1 {
 		return nil // Only condense single-item declaration groups.
 	}
 
-	if f.hasCommentsInRange(decl.Pos(), decl.End()) {
+	if f.hasCommentsInRange(file, decl.Pos(), decl.End()) {
 		return nil
 	}
 
 	var buf bytes.Buffer
 	buf.WriteString(decl.Tok.String())
 	buf.WriteString(" ")
-
-	switch spec := decl.Specs[0].(type) {
-	case *ast.ImportSpec: // import
-		if spec.Name != nil {
-			buf.WriteString(spec.Name.Name)
-			buf.WriteString(" ")
-		}
-		buf.WriteString(spec.Path.Value)
-
-	case *ast.TypeSpec: // type
-		buf.WriteString(spec.Name.Name)
-		if spec.Assign.IsValid() {
-			buf.WriteString(" = ")
-		} else {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(f.exprToString(spec.Type))
-
-	case *ast.ValueSpec: // var, const
-		for i, name := range spec.Names {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(name.Name)
-		}
-		if spec.Type != nil {
-			buf.WriteString(" ")
-			buf.WriteString(f.exprToString(spec.Type))
-		}
-		if len(spec.Values) > 0 {
-			buf.WriteString(" = ")
-			for i, value := range spec.Values {
-				if i > 0 {
-					buf.WriteString(", ")
-				}
-				buf.WriteString(f.exprToString(value))
-			}
-		}
-	}
+	buf.WriteString(f.exprToString(fset, decl.Specs[0]))
 
 	return []replacement{{
-		start:   f.fset.Position(decl.Pos()).Offset,
-		end:     f.fset.Position(decl.End()).Offset,
+		start:   fset.Position(decl.Pos()).Offset,
+		end:     fset.Position(decl.End()).Offset,
 		text:    buf.Bytes(),
 		feature: Declarations,
 		items:   1,
@@ -452,12 +415,12 @@ func (f *Formatter) analyzeDeclGroup(decl *ast.GenDecl) []replacement {
 }
 
 // analyzeTypeDecl analyzes type declarations for condensing.
-func (f *Formatter) analyzeTypeDecl(decl *ast.GenDecl) []replacement {
+func (f *Formatter) analyzeTypeDecl(fset *token.FileSet, file *ast.File, decl *ast.GenDecl) []replacement {
 	var replacements []replacement
 
 	for _, spec := range decl.Specs {
 		if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.TypeParams != nil {
-			if r := f.analyzeFieldList(typeSpec.TypeParams, '[', ']', Types); r != nil {
+			if r := f.analyzeFieldList(fset, file, typeSpec.TypeParams, '[', ']', Types); r != nil {
 				replacements = append(replacements, *r)
 			}
 		}
@@ -467,8 +430,8 @@ func (f *Formatter) analyzeTypeDecl(decl *ast.GenDecl) []replacement {
 }
 
 // analyzeCompositeLit analyzes composite literals for condensing.
-func (f *Formatter) analyzeCompositeLit(lit *ast.CompositeLit) []replacement {
-	if f.hasCommentsInRange(lit.Pos(), lit.End()) {
+func (f *Formatter) analyzeCompositeLit(fset *token.FileSet, file *ast.File, lit *ast.CompositeLit) []replacement {
+	if f.hasCommentsInRange(file, lit.Pos(), lit.End()) {
 		return nil
 	}
 
@@ -499,7 +462,7 @@ func (f *Formatter) analyzeCompositeLit(lit *ast.CompositeLit) []replacement {
 	var buf bytes.Buffer
 
 	if lit.Type != nil {
-		buf.WriteString(f.exprToString(lit.Type))
+		buf.WriteString(f.exprToString(fset, lit.Type))
 	}
 
 	buf.WriteString("{")
@@ -507,13 +470,13 @@ func (f *Formatter) analyzeCompositeLit(lit *ast.CompositeLit) []replacement {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(f.exprToString(elt))
+		buf.WriteString(f.exprToString(fset, elt))
 	}
 	buf.WriteString("}")
 
 	return []replacement{{
-		start:   f.fset.Position(lit.Pos()).Offset,
-		end:     f.fset.Position(lit.End()).Offset,
+		start:   fset.Position(lit.Pos()).Offset,
+		end:     fset.Position(lit.End()).Offset,
 		text:    buf.Bytes(),
 		feature: feature,
 		items:   len(lit.Elts),
@@ -521,23 +484,28 @@ func (f *Formatter) analyzeCompositeLit(lit *ast.CompositeLit) []replacement {
 }
 
 // analyzeFuncType analyzes function types for condensing.
-func (f *Formatter) analyzeFuncType(funcType *ast.FuncType, feature Feature) []replacement {
+func (f *Formatter) analyzeFuncType(
+	fset *token.FileSet,
+	file *ast.File,
+	funcType *ast.FuncType,
+	feature Feature,
+) []replacement {
 	var replacements []replacement
 
 	if funcType.TypeParams != nil && len(funcType.TypeParams.List) > 0 {
-		if r := f.analyzeFieldList(funcType.TypeParams, '[', ']', feature); r != nil {
+		if r := f.analyzeFieldList(fset, file, funcType.TypeParams, '[', ']', feature); r != nil {
 			replacements = append(replacements, *r)
 		}
 	}
 
 	if funcType.Params != nil && len(funcType.Params.List) > 0 {
-		if r := f.analyzeFieldList(funcType.Params, '(', ')', feature); r != nil {
+		if r := f.analyzeFieldList(fset, file, funcType.Params, '(', ')', feature); r != nil {
 			replacements = append(replacements, *r)
 		}
 	}
 
 	if funcType.Results != nil && len(funcType.Results.List) > 0 {
-		if r := f.analyzeFieldList(funcType.Results, '(', ')', feature); r != nil {
+		if r := f.analyzeFieldList(fset, file, funcType.Results, '(', ')', feature); r != nil {
 			replacements = append(replacements, *r)
 		}
 	}
@@ -546,25 +514,25 @@ func (f *Formatter) analyzeFuncType(funcType *ast.FuncType, feature Feature) []r
 }
 
 // analyzeIndexListExpr analyzes index list expressions for condensing.
-func (f *Formatter) analyzeIndexListExpr(expr *ast.IndexListExpr) []replacement {
-	if f.hasCommentsInRange(expr.Pos(), expr.End()) {
+func (f *Formatter) analyzeIndexListExpr(fset *token.FileSet, file *ast.File, expr *ast.IndexListExpr) []replacement {
+	if f.hasCommentsInRange(file, expr.Pos(), expr.End()) {
 		return nil
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(f.exprToString(expr.X))
+	buf.WriteString(f.exprToString(fset, expr.X))
 	buf.WriteByte('[')
 	for i, index := range expr.Indices {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(f.exprToString(index))
+		buf.WriteString(f.exprToString(fset, index))
 	}
 	buf.WriteByte(']')
 
 	return []replacement{{
-		start:   f.fset.Position(expr.Pos()).Offset,
-		end:     f.fset.Position(expr.End()).Offset,
+		start:   fset.Position(expr.Pos()).Offset,
+		end:     fset.Position(expr.End()).Offset,
 		text:    buf.Bytes(),
 		feature: Types, // Generic type instantiations are considered part of types.
 		items:   len(expr.Indices),
@@ -572,20 +540,20 @@ func (f *Formatter) analyzeIndexListExpr(expr *ast.IndexListExpr) []replacement 
 }
 
 // analyzeCallExpr analyzes call expressions for condensing.
-func (f *Formatter) analyzeCallExpr(call *ast.CallExpr) []replacement {
-	if f.hasCommentsInRange(call.Pos(), call.End()) {
+func (f *Formatter) analyzeCallExpr(fset *token.FileSet, file *ast.File, call *ast.CallExpr) []replacement {
+	if f.hasCommentsInRange(file, call.Pos(), call.End()) {
 		return nil
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(f.exprToString(call.Fun))
+	buf.WriteString(f.exprToString(fset, call.Fun))
 	buf.WriteString("(")
 
 	for i, arg := range call.Args {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(f.exprToString(arg))
+		buf.WriteString(f.exprToString(fset, arg))
 	}
 
 	if call.Ellipsis.IsValid() {
@@ -595,8 +563,8 @@ func (f *Formatter) analyzeCallExpr(call *ast.CallExpr) []replacement {
 	buf.WriteString(")")
 
 	return []replacement{{
-		start:   f.fset.Position(call.Pos()).Offset,
-		end:     f.fset.Position(call.End()).Offset,
+		start:   fset.Position(call.Pos()).Offset,
+		end:     fset.Position(call.End()).Offset,
 		text:    buf.Bytes(),
 		feature: Calls,
 		items:   len(call.Args),
@@ -604,19 +572,25 @@ func (f *Formatter) analyzeCallExpr(call *ast.CallExpr) []replacement {
 }
 
 // analyzeFieldList provides generic analysis for any *ast.FieldList.
-func (f *Formatter) analyzeFieldList(fieldList *ast.FieldList, opening, closing byte, feature Feature) *replacement {
+func (f *Formatter) analyzeFieldList(
+	fset *token.FileSet,
+	file *ast.File,
+	fieldList *ast.FieldList,
+	opening, closing byte,
+	feature Feature,
+) *replacement {
 	if fieldList == nil || len(fieldList.List) == 0 {
 		return nil
 	}
 
-	start := f.fset.Position(fieldList.Pos())
-	end := f.fset.Position(fieldList.End())
+	start := fset.Position(fieldList.Pos())
+	end := fset.Position(fieldList.End())
 
 	if start.Line == end.Line {
 		return nil // Check if already single-line.
 	}
 
-	if f.hasCommentsInRange(fieldList.Pos(), fieldList.End()) {
+	if f.hasCommentsInRange(file, fieldList.Pos(), fieldList.End()) {
 		return nil
 	}
 
@@ -639,23 +613,24 @@ func (f *Formatter) analyzeFieldList(fieldList *ast.FieldList, opening, closing 
 			if len(field.Names) > 0 {
 				buf.WriteString(" ")
 			}
-			buf.WriteString(f.exprToString(field.Type))
+			buf.WriteString(f.exprToString(fset, field.Type))
 		}
 	}
 
 	buf.WriteByte(closing)
 
 	return &replacement{
-		start: start.Offset,
-		end:   end.Offset, text: buf.Bytes(),
+		start:   start.Offset,
+		end:     end.Offset,
+		text:    buf.Bytes(),
 		feature: feature,
 		items:   len(fieldList.List),
 	}
 }
 
 // hasCommentsInRange checks if there are any comments within the given range.
-func (f *Formatter) hasCommentsInRange(start, end token.Pos) bool {
-	for _, cg := range f.comments {
+func (f *Formatter) hasCommentsInRange(file *ast.File, start, end token.Pos) bool {
+	for _, cg := range file.Comments {
 		if cg.Pos() >= start && cg.End() <= end {
 			return true
 		}
@@ -664,9 +639,9 @@ func (f *Formatter) hasCommentsInRange(start, end token.Pos) bool {
 }
 
 // exprToString converts an AST expression to its string representation.
-func (f *Formatter) exprToString(expr ast.Expr) string {
+func (f *Formatter) exprToString(fset *token.FileSet, expr ast.Node) string {
 	var buf bytes.Buffer
-	if err := format.Node(&buf, f.fset, expr); err != nil {
+	if err := format.Node(&buf, fset, expr); err != nil {
 		return "" // Return empty string on error
 	}
 	return buf.String()
