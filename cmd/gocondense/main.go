@@ -32,28 +32,15 @@ var features = map[string]gocondense.Feature{
 	"all":          gocondense.All,
 }
 
-//nolint:cyclop,funlen,gocognit
+//nolint:funlen
 func main() {
 	var (
 		maxLen   = flag.Int("max-len", 80, "Maximum line length before keeping multi-line")
-		maxItems = flag.Int("max-items", 0, "Maximum number of items before keeping multi-line (0 for no limit)")
 		tabWidth = flag.Int("tab-width", 4, "Width of a tab character for line length calculation")
 		enable   = flag.String("enable", "all", "Comma-separated list of features to enable")
 		disable  = flag.String("disable", "", "Comma-separated list of features to disable")
 		help     = flag.Bool("help", false, "Show help message")
 	)
-
-	overrideMaxLen := make(map[string]*int)
-	overrideMaxItems := make(map[string]*int)
-	for name := range features {
-		if name == "all" {
-			continue
-		}
-		flagName := name + ".max-len"
-		overrideMaxLen[name] = flag.Int(flagName, 0, "Override max-len for "+name)
-		flagName = name + ".max-items"
-		overrideMaxItems[name] = flag.Int(flagName, 0, "Override max-items for "+name)
-	}
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] [file|dir|path/...]", os.Args[0])
@@ -83,26 +70,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	overrides := make(map[gocondense.Feature]gocondense.ConfigOverride)
-	for name, val := range overrideMaxLen {
-		if *val > 0 {
-			overrides[features[name]] = gocondense.ConfigOverride{MaxLen: *val}
-		}
-	}
-	for name, val := range overrideMaxItems {
-		if *val > 0 {
-			override := overrides[features[name]]
-			override.MaxItems = *val
-			overrides[features[name]] = override
-		}
-	}
-
 	config := &gocondense.Config{
 		MaxLen:   *maxLen,
-		MaxItems: *maxItems,
 		TabWidth: *tabWidth,
 		Enable:   enabled &^ disabled,
-		Override: overrides,
 	}
 
 	formatter := gocondense.New(config)

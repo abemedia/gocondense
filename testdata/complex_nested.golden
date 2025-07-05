@@ -18,7 +18,10 @@ func processData(people []Person, filter func(Person) bool) []string {
 }
 
 func main() {
-	people := []Person{{Name: "Alice", Age: 30}, {Name: "Bob", Age: 25}}
+	people := []Person{
+		{Name: "Alice", Age: 30},
+		{Name: "Bob", Age: 25},
+	}
 
 	adults := processData(people, func(p Person) bool {
 		return p.Age >= 18

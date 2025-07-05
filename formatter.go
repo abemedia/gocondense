@@ -2,13 +2,14 @@ package gocondense
 
 import (
 	"bytes"
-	"cmp"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"slices"
+
+	"golang.org/x/tools/go/ast/astutil"
 )
 
 // Feature represents a bitmask flag for enabling or disabling specific formatting features.
@@ -142,49 +143,32 @@ type Config struct {
 	// If 0, the DefaultConfig.MaxLen value is used instead.
 	MaxLen int
 
-	// MaxItems specifies the maximum number of items (parameters, arguments, fields, etc.)
-	// that can be condensed onto a single line. Set to 0 for no limit.
-	// For example, with MaxItems=3, a function call with 4 arguments will remain multi-line.
-	MaxItems int
-
 	// TabWidth specifies the width of a tab character for line length calculations.
 	// This affects how MaxLen is calculated when the source code contains tab characters.
 	// If 0, the DefaultConfig.TabWidth value is used instead.
 	TabWidth int
+
+	// MaxKeyValue specifies the maximum number of key-value pairs allowed before keeping
+	// constructs multi-line. This applies to map literals and struct literals with named fields.
+	// Key-value expressions with more pairs than this limit will not be condensed.
+	// If 0, the DefaultConfig.MaxKeyValue value is used instead.
+	MaxKeyValue int
 
 	// Enable specifies which formatting features are active using bitwise flags.
 	// Use combinations like (Declarations | Funcs) to enable specific features,
 	// or All to enable everything.
 	// If 0, the DefaultConfig.Enable value is used instead.
 	Enable Feature
-
-	// Override provides feature-specific configuration overrides that take precedence
-	// over the global MaxLen and MaxItems settings. This allows fine-grained control,
-	// such as allowing more items for function calls than for struct literals.
-	Override map[Feature]ConfigOverride
-}
-
-// ConfigOverride allows specifying feature-specific configuration overrides.
-// When a feature has an override defined, these values take precedence over
-// the global Config settings for that specific feature type.
-type ConfigOverride struct {
-	// MaxLen overrides the global maximum line length for this specific feature.
-	// If 0, the global Config.MaxLen value is used instead.
-	MaxLen int
-
-	// MaxItems overrides the global maximum item count for this specific feature.
-	// If 0, the global Config.MaxItems value is used instead.
-	MaxItems int
 }
 
 // DefaultConfig provides a sensible default configuration for the formatter.
-// It enables all features with a maximum line length of 80 characters,
-// no item limit, and tab width of 4 spaces.
+// It enables all features with a maximum line length of 80 characters
+// and tab width of 4 spaces.
 var DefaultConfig = &Config{
-	MaxLen:   80,
-	MaxItems: 3,
-	TabWidth: 4,
-	Enable:   All,
+	MaxLen:      80,
+	TabWidth:    4,
+	MaxKeyValue: 3,
+	Enable:      All,
 }
 
 // Format is a convenience function that formats the given Go source code
@@ -215,9 +199,8 @@ func New(config *Config) *Formatter {
 }
 
 // Format processes the given Go source code and returns the condensed version.
-// The function parses the source code, identifies multi-line constructs that can
-// be safely condensed based on the formatter's configuration, and applies the
-// transformations. It runs multiple passes until no more changes can be made.
+// The function parses the source code, traverses the AST to edit nodes in-place
+// for condensation, then uses format.Node to print the modified AST.
 //
 // The formatting respects the configured limits (MaxLen, MaxItems) and feature
 // flags, ensuring that only enabled features are processed and that the resulting
@@ -227,212 +210,258 @@ func New(config *Config) *Formatter {
 func (f *Formatter) Format(src []byte) ([]byte, error) {
 	fset := token.NewFileSet()
 
-	maxPasses := 10 // Prevent infinite loops
-
-	// Run multiple passes until no more changes are made.
-	for range maxPasses {
-		file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse source: %w", err)
-		}
-
-		result := f.processFile(fset, file, src)
-
-		if bytes.Equal(src, result) {
-			break // If no changes were made, we're done.
-		}
-
-		src = result
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse source: %w", err)
 	}
 
-	return format.Source(src)
-}
-
-// processFile walks the AST and applies transformations using string replacement.
-//
-//nolint:cyclop,gocognit
-func (f *Formatter) processFile(fset *token.FileSet, file *ast.File, src []byte) []byte {
-	var replacements []replacement
-
-	ast.Inspect(file, func(node ast.Node) bool {
-		if node == nil {
-			return true
-		}
-
-		if fset.Position(node.Pos()).Line == fset.Position(node.End()).Line {
-			return false // Skip nodes that are already single-line.
-		}
-
-		switch n := node.(type) {
-		case *ast.GenDecl:
-			if f.config.Enable.has(Declarations) {
-				replacements = append(replacements, f.analyzeDeclGroup(fset, file, n)...)
-			}
-			// Handle struct type declarations and generic type parameters
-			if n.Tok == token.TYPE && f.config.Enable.has(Types) {
-				replacements = append(replacements, f.analyzeTypeDecl(fset, file, n)...)
-			}
-		case *ast.IndexListExpr:
-			if f.config.Enable.has(Types) {
-				replacements = append(replacements, f.analyzeIndexListExpr(fset, file, n)...)
-			}
-		case *ast.FuncDecl:
-			if f.config.Enable.has(Funcs) {
-				replacements = append(replacements, f.analyzeFuncType(fset, file, n.Type, Funcs)...)
-			}
-		case *ast.FuncLit:
-			if f.config.Enable.has(Literals) {
-				replacements = append(replacements, f.analyzeFuncType(fset, file, n.Type, Literals)...)
-			}
-		case *ast.CallExpr:
-			if f.config.Enable.has(Calls) {
-				replacements = append(replacements, f.analyzeCallExpr(fset, file, n)...)
-			}
-		case *ast.CompositeLit:
-			if f.config.Enable.has(Structs) || f.config.Enable.has(Slices) || f.config.Enable.has(Maps) {
-				replacements = append(replacements, f.analyzeCompositeLit(fset, file, n)...)
-			}
-		}
-
-		return true
-	})
-
-	replacements = f.processReplacements(src, replacements)
-
-	// Sort by start position (descending for reverse application).
-	slices.SortFunc(replacements, func(a, b replacement) int { return cmp.Compare(b.start, a.start) })
-
-	for _, r := range replacements {
-		if r.start >= 0 && r.end <= len(src) && r.start <= r.end {
-			src = slices.Replace(src, r.start, r.end, r.text...)
-		}
+	if ast.IsGenerated(file) {
+		return src, nil
 	}
 
-	return src
-}
-
-// processReplacements validates, deduplicates and sorts replacement
-// candidates. It ensures replacements meet configured constraints and resolves
-// conflicts by preferring more specific replacements over broader ones.
-//
-//nolint:gocognit
-func (f *Formatter) processReplacements(src []byte, replacements []replacement) []replacement {
-	if len(replacements) == 0 {
-		return replacements
+	editor := &astEditor{
+		config:    f.config,
+		fset:      fset,
+		file:      file,
+		tokenFile: fset.File(file.Pos()),
+		replaced:  map[ast.Node]ast.Node{},
 	}
 
-	tabWidth := cmp.Or(f.config.TabWidth, DefaultConfig.TabWidth)
-
-	// visualLength calculates the visual length of a byte slice, accounting for tabs.
-	visualLength := func(b []byte) int {
-		return len(b) + (tabWidth-1)*bytes.Count(b, []byte{'\t'})
-	}
-
-	result := make([]replacement, 0, len(replacements))
-
-Loop:
-	for _, r := range replacements {
-		maxLen := cmp.Or(f.config.Override[r.feature].MaxLen, f.config.MaxLen, DefaultConfig.MaxLen)
-		maxItems := cmp.Or(f.config.Override[r.feature].MaxItems, f.config.MaxItems, DefaultConfig.MaxItems)
-
-		if maxItems > 0 && r.items > maxItems {
-			continue // Skip if too many items.
-		}
-
-		// Check line length constraints
-		lineStart := bytes.LastIndexByte(src[:r.start], '\n') + 1
-		lineEnd := r.end + bytes.IndexByte(src[r.end:], '\n')
-		if lineEnd < r.end {
-			lineEnd = len(src)
-		}
-
-		prefix := visualLength(src[lineStart:r.start])
-		suffix := visualLength(src[r.end:lineEnd])
-		lines := bytes.Split(r.text, []byte("\n"))
-
-		for i, line := range lines {
-			var currentLen int
-			if i == 0 {
-				currentLen += prefix
-			}
-			currentLen += visualLength(line)
-			if i == len(lines)-1 {
-				currentLen += suffix
-			}
-			if currentLen > maxLen {
-				continue Loop // Skip if any line exceeds max length.
-			}
-		}
-
-		// Check for overlaps with existing replacements
-		for j, prev := range result {
-			if (r.start >= prev.start && r.start < prev.end) ||
-				(r.end > prev.start && r.end <= prev.end) ||
-				(r.start <= prev.start && r.end >= prev.end) {
-				// Keep the smaller (more specific) replacement
-				if (r.end - r.start) < (prev.end - prev.start) {
-					result[j] = r
-				}
-				continue Loop // Skip if overlaps with an existing replacement.
-			}
-		}
-
-		result = append(result, r)
-	}
-
-	return result
-}
-
-type replacement struct {
-	start, end int
-	text       []byte
-	feature    Feature
-	items      int
-}
-
-// analyzeDeclGroup analyzes declaration groups for condensing.
-func (f *Formatter) analyzeDeclGroup(fset *token.FileSet, file *ast.File, decl *ast.GenDecl) []replacement {
-	if len(decl.Specs) != 1 {
-		return nil // Only condense single-item declaration groups.
-	}
-
-	if f.hasCommentsInRange(file, decl.Pos(), decl.End()) {
-		return nil
-	}
+	astutil.Apply(file, editor.applyPre, editor.applyPost)
 
 	var buf bytes.Buffer
-	buf.WriteString(decl.Tok.String())
-	buf.WriteString(" ")
-	buf.WriteString(f.exprToString(fset, decl.Specs[0]))
+	if err := format.Node(&buf, fset, file); err != nil {
+		return nil, fmt.Errorf("failed to format AST: %w", err)
+	}
 
-	return []replacement{{
-		start:   fset.Position(decl.Pos()).Offset,
-		end:     fset.Position(decl.End()).Offset,
-		text:    buf.Bytes(),
-		feature: Declarations,
-		items:   1,
-	}}
+	return buf.Bytes(), nil
 }
 
-// analyzeTypeDecl analyzes type declarations for condensing.
-func (f *Formatter) analyzeTypeDecl(fset *token.FileSet, file *ast.File, decl *ast.GenDecl) []replacement {
-	var replacements []replacement
+// astEditor handles editing AST nodes in-place for condensation.
+type astEditor struct {
+	config    *Config
+	fset      *token.FileSet
+	file      *ast.File
+	tokenFile *token.File
+	replaced  map[ast.Node]ast.Node
+}
 
-	for _, spec := range decl.Specs {
-		if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.TypeParams != nil {
-			if r := f.analyzeFieldList(fset, file, typeSpec.TypeParams, '[', ']', Types); r != nil {
-				replacements = append(replacements, *r)
+// applyPre is called before visiting children nodes.
+func (e *astEditor) applyPre(c *astutil.Cursor) bool {
+	node := c.Node()
+	if node == nil {
+		return true
+	}
+
+	if e.isSingleLine(node) {
+		return false
+	}
+
+	var newNode ast.Node
+	var removeLines bool
+
+	switch n := node.(type) {
+	case *ast.GenDecl:
+		newNode = e.replaceGenDecl(n)
+		removeLines = true
+	case *ast.TypeSpec:
+		newNode = e.replaceTypeSpec(n)
+	case *ast.FuncDecl:
+		newNode = e.replaceFuncDecl(n)
+	case *ast.CallExpr:
+		newNode = e.replaceCallExpr(n)
+		removeLines = !slices.ContainsFunc(n.Args, isComplexExpr)
+	case *ast.CompositeLit:
+		newNode = e.replaceCompositeLit(n)
+		removeLines = !slices.ContainsFunc(n.Elts, isComplexExpr)
+	case *ast.FuncLit:
+		newNode = e.replaceFuncLit(n)
+		removeLines = true
+	default:
+		return true
+	}
+
+	if newNode != nil && newNode != node && e.canCondense(newNode) {
+		e.replaced[newNode] = node
+		c.Replace(newNode)
+		if removeLines {
+			e.removeNewLines(node, newNode)
+		}
+	}
+
+	return true
+}
+
+func (e *astEditor) applyPost(c *astutil.Cursor) bool {
+	node := c.Node()
+	if node == nil || !node.Pos().IsValid() {
+		return true
+	}
+
+	var exprs []ast.Expr
+
+	switch n := node.(type) {
+	case *ast.CallExpr:
+		exprs = n.Args
+	case *ast.CompositeLit:
+		exprs = n.Elts
+	default:
+		return true
+	}
+
+	if slices.ContainsFunc(exprs, func(expr ast.Expr) bool { return !expr.Pos().IsValid() }) {
+		base := node.Pos()
+		end := node.End()
+		diff := (end - base - 2) / token.Pos(len(exprs))
+
+		for i, expr := range exprs {
+			pos := base + (token.Pos(i+1) * diff)
+			switch ex := expr.(type) {
+			case *ast.CompositeLit:
+				ex.Lbrace = pos
+			case *ast.FuncLit:
+				ex.Type.Func = pos
+			case *ast.CallExpr:
+				ex.Lparen = pos
+			case *ast.InterfaceType:
+				ex.Interface = pos
 			}
 		}
 	}
 
-	return replacements
+	return true
 }
 
-// analyzeCompositeLit analyzes composite literals for condensing.
-func (f *Formatter) analyzeCompositeLit(fset *token.FileSet, file *ast.File, lit *ast.CompositeLit) []replacement {
-	if f.hasCommentsInRange(file, lit.Pos(), lit.End()) {
-		return nil
+// replaceGenDecl replaces a GenDecl with a condensed version.
+func (e *astEditor) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
+	if !e.config.Enable.has(Declarations) {
+		return decl
+	}
+
+	if e.isSingleLine(decl) {
+		return decl
+	}
+
+	if len(decl.Specs) > 1 || e.hasComments(decl) {
+		return decl
+	}
+
+	return &ast.GenDecl{
+		Doc:    decl.Doc,
+		Tok:    decl.Tok,
+		TokPos: decl.TokPos,
+		Specs:  decl.Specs,
+	}
+}
+
+// replaceTypeSpec replaces a TypeSpec with a condensed version.
+func (e *astEditor) replaceTypeSpec(spec *ast.TypeSpec) *ast.TypeSpec {
+	if !e.config.Enable.has(Types) || spec.TypeParams == nil {
+		return spec
+	}
+
+	if e.hasComments(spec.TypeParams) {
+		return spec
+	}
+
+	newTypeParams := e.replaceFieldList(spec.TypeParams, Types)
+	if newTypeParams == spec.TypeParams {
+		return spec
+	}
+
+	return &ast.TypeSpec{
+		Doc:        spec.Doc,
+		Name:       spec.Name,
+		TypeParams: e.replaceFieldList(spec.TypeParams, Types),
+		Assign:     spec.Assign,
+		Type:       spec.Type,
+		Comment:    spec.Comment,
+	}
+}
+
+// replaceFuncDecl replaces a FuncDecl with a condensed version.
+func (e *astEditor) replaceFuncDecl(decl *ast.FuncDecl) *ast.FuncDecl {
+	if e.isSingleLine(decl) || !e.config.Enable.has(Funcs) {
+		return decl
+	}
+
+	newType := e.replaceFuncType(decl.Type, Funcs)
+	newRecv := e.replaceFieldList(decl.Recv, Funcs)
+
+	if newType == decl.Type && newRecv == decl.Recv {
+		return decl
+	}
+
+	return &ast.FuncDecl{
+		Doc:  decl.Doc,
+		Recv: newRecv,
+		Name: decl.Name,
+		Type: newType,
+		Body: decl.Body,
+	}
+}
+
+// replaceFuncLit replaces a FuncLit with a condensed version.
+func (e *astEditor) replaceFuncLit(lit *ast.FuncLit) *ast.FuncLit {
+	if !e.config.Enable.has(Literals) || e.isSingleLine(lit) {
+		return lit
+	}
+
+	newType := e.replaceFuncType(lit.Type, Literals)
+	if newType == lit.Type {
+		return lit
+	}
+
+	return &ast.FuncLit{
+		Type: newType,
+		Body: lit.Body,
+	}
+}
+
+// replaceFuncType replaces a FuncType with a condensed version.
+func (e *astEditor) replaceFuncType(funcType *ast.FuncType, feature Feature) *ast.FuncType {
+	results := e.replaceFieldList(funcType.Results, feature)
+	typeParams := e.replaceFieldList(funcType.TypeParams, feature)
+	params := e.replaceFieldList(funcType.Params, feature)
+
+	if results == funcType.Results && typeParams == funcType.TypeParams && params == funcType.Params {
+		return funcType
+	}
+
+	return &ast.FuncType{
+		Func:       funcType.Func,
+		TypeParams: typeParams,
+		Params:     params,
+		Results:    results,
+	}
+}
+
+// replaceCallExpr replaces a CallExpr with a condensed version.
+func (e *astEditor) replaceCallExpr(call *ast.CallExpr) *ast.CallExpr {
+	if !e.config.Enable.has(Calls) {
+		return call
+	}
+
+	if e.isSingleLine(call) || e.hasComments(call) {
+		return call
+	}
+
+	newArgs := make([]ast.Expr, len(call.Args))
+	for i, arg := range call.Args {
+		newArgs[i] = e.replaceExpr(arg)
+	}
+
+	return &ast.CallExpr{
+		Fun:      call.Fun,
+		Args:     newArgs,
+		Ellipsis: call.Ellipsis,
+	}
+}
+
+// replaceCompositeLit replaces a CompositeLit with a condensed version.
+func (e *astEditor) replaceCompositeLit(lit *ast.CompositeLit) *ast.CompositeLit {
+	if e.isSingleLine(lit) || e.hasComments(lit) || slices.ContainsFunc(lit.Elts, isComplexExpr) {
+		return lit
 	}
 
 	var feature Feature
@@ -440,14 +469,17 @@ func (f *Formatter) analyzeCompositeLit(fset *token.FileSet, file *ast.File, lit
 	switch lit.Type.(type) {
 	case *ast.MapType:
 		feature = Maps
-	case *ast.StructType: // Only catches anonymous structs.
+	case *ast.StructType:
 		feature = Structs
 	default:
-		// Fall back to checking key-value elements.
-		hasKeyValue := slices.ContainsFunc(lit.Elts, func(elt ast.Expr) bool {
-			_, ok := elt.(*ast.KeyValueExpr)
-			return ok
-		})
+		// Check if elements are key-value pairs (struct-like)
+		hasKeyValue := false
+		for _, elt := range lit.Elts {
+			if _, ok := elt.(*ast.KeyValueExpr); ok {
+				hasKeyValue = true
+				break
+			}
+		}
 		if hasKeyValue {
 			feature = Structs
 		} else {
@@ -455,182 +487,111 @@ func (f *Formatter) analyzeCompositeLit(fset *token.FileSet, file *ast.File, lit
 		}
 	}
 
-	if !f.config.Enable.has(feature) {
-		return nil
+	if !e.config.Enable.has(feature) {
+		return lit
 	}
 
-	var buf bytes.Buffer
-
-	if lit.Type != nil {
-		buf.WriteString(f.exprToString(fset, lit.Type))
+	if (feature == Structs || feature == Maps) && len(lit.Elts) > e.config.MaxKeyValue {
+		return lit
 	}
 
-	buf.WriteString("{")
+	newElts := make([]ast.Expr, len(lit.Elts))
 	for i, elt := range lit.Elts {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.WriteString(f.exprToString(fset, elt))
-	}
-	buf.WriteString("}")
-
-	return []replacement{{
-		start:   fset.Position(lit.Pos()).Offset,
-		end:     fset.Position(lit.End()).Offset,
-		text:    buf.Bytes(),
-		feature: feature,
-		items:   len(lit.Elts),
-	}}
-}
-
-// analyzeFuncType analyzes function types for condensing.
-func (f *Formatter) analyzeFuncType(
-	fset *token.FileSet,
-	file *ast.File,
-	funcType *ast.FuncType,
-	feature Feature,
-) []replacement {
-	var replacements []replacement
-
-	if funcType.TypeParams != nil && len(funcType.TypeParams.List) > 0 {
-		if r := f.analyzeFieldList(fset, file, funcType.TypeParams, '[', ']', feature); r != nil {
-			replacements = append(replacements, *r)
-		}
+		newElts[i] = e.replaceExpr(elt)
 	}
 
-	if funcType.Params != nil && len(funcType.Params.List) > 0 {
-		if r := f.analyzeFieldList(fset, file, funcType.Params, '(', ')', feature); r != nil {
-			replacements = append(replacements, *r)
-		}
-	}
-
-	if funcType.Results != nil && len(funcType.Results.List) > 0 {
-		if r := f.analyzeFieldList(fset, file, funcType.Results, '(', ')', feature); r != nil {
-			replacements = append(replacements, *r)
-		}
-	}
-
-	return replacements
-}
-
-// analyzeIndexListExpr analyzes index list expressions for condensing.
-func (f *Formatter) analyzeIndexListExpr(fset *token.FileSet, file *ast.File, expr *ast.IndexListExpr) []replacement {
-	if f.hasCommentsInRange(file, expr.Pos(), expr.End()) {
-		return nil
-	}
-
-	var buf bytes.Buffer
-	buf.WriteString(f.exprToString(fset, expr.X))
-	buf.WriteByte('[')
-	for i, index := range expr.Indices {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.WriteString(f.exprToString(fset, index))
-	}
-	buf.WriteByte(']')
-
-	return []replacement{{
-		start:   fset.Position(expr.Pos()).Offset,
-		end:     fset.Position(expr.End()).Offset,
-		text:    buf.Bytes(),
-		feature: Types, // Generic type instantiations are considered part of types.
-		items:   len(expr.Indices),
-	}}
-}
-
-// analyzeCallExpr analyzes call expressions for condensing.
-func (f *Formatter) analyzeCallExpr(fset *token.FileSet, file *ast.File, call *ast.CallExpr) []replacement {
-	if f.hasCommentsInRange(file, call.Pos(), call.End()) {
-		return nil
-	}
-
-	var buf bytes.Buffer
-	buf.WriteString(f.exprToString(fset, call.Fun))
-	buf.WriteString("(")
-
-	for i, arg := range call.Args {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.WriteString(f.exprToString(fset, arg))
-	}
-
-	if call.Ellipsis.IsValid() {
-		buf.WriteString("...")
-	}
-
-	buf.WriteString(")")
-
-	return []replacement{{
-		start:   fset.Position(call.Pos()).Offset,
-		end:     fset.Position(call.End()).Offset,
-		text:    buf.Bytes(),
-		feature: Calls,
-		items:   len(call.Args),
-	}}
-}
-
-// analyzeFieldList provides generic analysis for any *ast.FieldList.
-func (f *Formatter) analyzeFieldList(
-	fset *token.FileSet,
-	file *ast.File,
-	fieldList *ast.FieldList,
-	opening, closing byte,
-	feature Feature,
-) *replacement {
-	if fieldList == nil || len(fieldList.List) == 0 {
-		return nil
-	}
-
-	start := fset.Position(fieldList.Pos())
-	end := fset.Position(fieldList.End())
-
-	if start.Line == end.Line {
-		return nil // Check if already single-line.
-	}
-
-	if f.hasCommentsInRange(file, fieldList.Pos(), fieldList.End()) {
-		return nil
-	}
-
-	var buf bytes.Buffer
-	buf.WriteByte(opening)
-
-	for i, field := range fieldList.List {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-
-		for j, name := range field.Names {
-			if j > 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(name.Name)
-		}
-
-		if field.Type != nil {
-			if len(field.Names) > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(f.exprToString(fset, field.Type))
-		}
-	}
-
-	buf.WriteByte(closing)
-
-	return &replacement{
-		start:   start.Offset,
-		end:     end.Offset,
-		text:    buf.Bytes(),
-		feature: feature,
-		items:   len(fieldList.List),
+	return &ast.CompositeLit{
+		Type: lit.Type,
+		Elts: newElts,
 	}
 }
 
-// hasCommentsInRange checks if there are any comments within the given range.
-func (f *Formatter) hasCommentsInRange(file *ast.File, start, end token.Pos) bool {
-	for _, cg := range file.Comments {
+// replaceFieldList replaces a FieldList with a condensed version.
+func (e *astEditor) replaceFieldList(list *ast.FieldList, feature Feature) *ast.FieldList {
+	if list == nil || len(list.List) == 0 || !e.config.Enable.has(feature) {
+		return list
+	}
+
+	if e.isSingleLine(list) || e.hasComments(list) {
+		return list
+	}
+
+	hasComplexFields := slices.ContainsFunc(list.List, func(f *ast.Field) bool { return isComplexExpr(f.Type) })
+	if hasComplexFields {
+		return list
+	}
+
+	newFields := make([]*ast.Field, len(list.List))
+	for i, field := range list.List {
+		var newNames []*ast.Ident
+		for _, name := range field.Names {
+			newNames = append(newNames, &ast.Ident{Name: name.Name})
+		}
+
+		newFields[i] = &ast.Field{
+			Doc:     field.Doc,
+			Names:   newNames,
+			Type:    e.replaceExpr(field.Type),
+			Tag:     field.Tag,
+			Comment: field.Comment,
+		}
+	}
+
+	return &ast.FieldList{List: newFields}
+}
+
+// replaceExpr creates a deep copy of an expression with all positions set to NoPos.
+func (e *astEditor) replaceExpr(expr ast.Expr) ast.Expr {
+	switch ex := expr.(type) {
+	case *ast.Ident:
+		return &ast.Ident{Name: ex.Name}
+	case *ast.BasicLit:
+		return &ast.BasicLit{
+			Kind:  ex.Kind,
+			Value: ex.Value,
+		}
+	case *ast.KeyValueExpr:
+		key := e.replaceExpr(ex.Key)
+		value := e.replaceExpr(ex.Value)
+		if key == ex.Key && value == ex.Value || isComplexExpr(key) || isComplexExpr(value) {
+			return ex
+		}
+		return &ast.KeyValueExpr{Key: key, Value: value}
+	case *ast.CallExpr:
+		return e.replaceCallExpr(ex)
+	case *ast.SelectorExpr:
+		return &ast.SelectorExpr{
+			X:   e.replaceExpr(ex.X),
+			Sel: e.replaceExpr(ex.Sel).(*ast.Ident),
+		}
+	case *ast.CompositeLit:
+		return e.replaceCompositeLit(ex)
+	case *ast.FuncLit:
+		return e.replaceFuncLit(ex)
+	case *ast.StarExpr:
+		return &ast.StarExpr{X: e.replaceExpr(ex.X)}
+	case *ast.IndexListExpr:
+		newIndices := make([]ast.Expr, len(ex.Indices))
+		for i, idx := range ex.Indices {
+			newIndices[i] = e.replaceExpr(idx)
+		}
+		return &ast.IndexListExpr{
+			X:       ex.X,
+			Indices: newIndices,
+		}
+	case *ast.IndexExpr:
+		return &ast.IndexExpr{
+			X:     ex.X,
+			Index: e.replaceExpr(ex.Index),
+		}
+	}
+
+	return expr
+}
+
+// hasCommentsInRange checks if there are any comments between the given positions.
+func (e *astEditor) hasCommentsInRange(start, end token.Pos) bool {
+	for _, cg := range e.file.Comments {
 		if cg.Pos() >= start && cg.End() <= end {
 			return true
 		}
@@ -638,11 +599,94 @@ func (f *Formatter) hasCommentsInRange(file *ast.File, start, end token.Pos) boo
 	return false
 }
 
-// exprToString converts an AST expression to its string representation.
-func (f *Formatter) exprToString(fset *token.FileSet, expr ast.Node) string {
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, expr); err != nil {
-		return "" // Return empty string on error
+// hasComments checks if there are any comments within the node's position range.
+func (e *astEditor) hasComments(node ast.Node) bool {
+	return e.hasCommentsInRange(node.Pos(), node.End())
+}
+
+// isSingleLine checks if a node is already on a single line.
+func (e *astEditor) isSingleLine(node ast.Node) bool {
+	return e.line(node.Pos()) == e.line(node.End())
+}
+
+// line returns the line number for a position.
+func (e *astEditor) line(pos token.Pos) int {
+	return e.fset.Position(pos).Line
+}
+
+// removeLines removes all newlines between two line numbers, so that they end
+// up on the same line.
+func (e *astEditor) removeLines(fromLine, toLine int) {
+	for fromLine < toLine {
+		e.tokenFile.MergeLine(fromLine)
+		toLine--
 	}
-	return buf.String()
+}
+
+// removeNewLines removes blank lines that may be left when condensing a multi-line construct.
+func (e *astEditor) removeNewLines(oldNode, newNode ast.Node) {
+	if oldNode == nil || newNode == nil || oldNode == newNode {
+		return
+	}
+
+	start := e.line(oldNode.Pos())
+	end := e.line(oldNode.End())
+	oldLines := end - start
+	if oldLines < 1 {
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := format.Node(&buf, e.fset, newNode); err != nil {
+		panic(fmt.Sprintf("failed to format new node: %v", err))
+	}
+
+	newLines := bytes.Count(buf.Bytes(), []byte{'\n'})
+	linesToRemove := oldLines - newLines
+	if linesToRemove > 0 {
+		e.removeLines(end-linesToRemove, end)
+	}
+}
+
+// calculateLineLength calculates the length of a node when formatted as a single line.
+func (e *astEditor) calculateLineLength(node ast.Node) int {
+	var buf bytes.Buffer
+	if err := format.Node(&buf, e.fset, node); err != nil {
+		return 0
+	}
+	lines := buf.Bytes()
+
+	line, _, ok := bytes.Cut(lines, []byte{'\n'})
+	if !ok {
+		line = lines
+	}
+
+	length := 0
+	tabWidth := e.config.TabWidth
+	if tabWidth == 0 {
+		tabWidth = DefaultConfig.TabWidth
+	}
+
+	length = len(line) + bytes.Count(line, []byte{'\n'})*tabWidth - 1
+
+	return length
+}
+
+// canCondense checks if a node can be condensed without exceeding MaxLen.
+func (e *astEditor) canCondense(node ast.Node) bool {
+	maxLen := e.config.MaxLen
+	if maxLen == 0 {
+		maxLen = DefaultConfig.MaxLen
+	}
+
+	return e.calculateLineLength(node) <= maxLen
+}
+
+func isComplexExpr(expr ast.Expr) bool {
+	switch expr.(type) {
+	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr, *ast.InterfaceType:
+		return true
+	default:
+		return false
+	}
 }

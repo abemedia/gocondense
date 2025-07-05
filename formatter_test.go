@@ -48,7 +48,7 @@ func TestFormat(t *testing.T) {
 				t.Fatalf("failed to read golden file %s: %v", goldenFile, err)
 			}
 
-			if diff := cmp.Diff(got, want); diff != "" {
+			if diff := cmp.Diff(want, got); diff != "" {
 				t.Error(diff)
 			}
 		})
@@ -144,90 +144,10 @@ func add(
 `,
 		},
 		{
-			name: "max_items_constraint_global",
-			config: &gocondense.Config{
-				MaxLen:   80,
-				MaxItems: 2,
-				Enable:   gocondense.All,
-			},
-			input: `package main
-
-func main() {
-	myFunc(
-		"a",
-		"b",
-		"c",
-	)
-}
-`,
-			want: `package main
-
-func main() {
-	myFunc(
-		"a",
-		"b",
-		"c",
-	)
-}
-`,
-		},
-		{
-			name: "max_items_override_allows",
-			config: &gocondense.Config{
-				MaxLen:   80,
-				MaxItems: 2,
-				Enable:   gocondense.All,
-				Override: map[gocondense.Feature]gocondense.ConfigOverride{
-					gocondense.Calls: {MaxItems: 3},
-				},
-			},
-			input: `package main
-
-func main() {
-	myFunc(
-		"a",
-		"b",
-		"c",
-	)
-}
-`,
-			want: `package main
-
-func main() {
-	myFunc("a", "b", "c")
-}
-`,
-		},
-		{
-			name: "maps_condensing",
-			config: &gocondense.Config{
-				MaxLen:   80,
-				MaxItems: 0,
-				Enable:   gocondense.Maps,
-			},
-			input: `package main
-
-func main() {
-	data := map[string]int{
-		"apple":  1,
-		"banana": 2,
-		"cherry": 3,
-	}
-}
-`,
-			want: `package main
-
-func main() {
-	data := map[string]int{"apple": 1, "banana": 2, "cherry": 3}
-}
-`,
-		},
-		{
 			name: "maps_disabled",
 			config: &gocondense.Config{
-				MaxLen:   80,
-				MaxItems: 0,
-				Enable:   gocondense.All &^ gocondense.Maps,
+				MaxLen: 80,
+				Enable: gocondense.All &^ gocondense.Maps,
 			},
 			input: `package main
 
@@ -247,37 +167,6 @@ func main() {
 		"banana": 2,
 		"cherry": 3,
 	}
-}
-`,
-		},
-		{
-			name: "max_items_override_prevents",
-			config: &gocondense.Config{
-				MaxLen:   80,
-				MaxItems: 4,
-				Enable:   gocondense.All,
-				Override: map[gocondense.Feature]gocondense.ConfigOverride{
-					gocondense.Calls: {MaxItems: 2},
-				},
-			},
-			input: `package main
-
-func main() {
-	myFunc(
-		"a",
-		"b",
-		"c",
-	)
-}
-`,
-			want: `package main
-
-func main() {
-	myFunc(
-		"a",
-		"b",
-		"c",
-	)
 }
 `,
 		},
@@ -290,7 +179,7 @@ func main() {
 			if err != nil {
 				t.Fatalf("failed to format: %v", err)
 			}
-			if diff := cmp.Diff(string(got), tt.want); diff != "" {
+			if diff := cmp.Diff(tt.want, string(got)); diff != "" {
 				t.Error(diff)
 			}
 		})
