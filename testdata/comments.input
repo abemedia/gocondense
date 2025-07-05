@@ -1,0 +1,35 @@
+// Package main is a placeholder package for the example.
+package main
+
+// This file contains various comments to test the gocondense formatter.
+
+// Importing fmt for demonstration purposes.
+import "fmt"
+
+// add is a function that adds two integers.
+func add(
+	a, b int, // a is the first integer, b is the second integer
+) int { // returns the sum of a and b
+	return a + b // return statement
+}
+
+func sub(
+	a, b int,
+) int { // returns
+	return a - b
+}
+
+// main is the entry point of the program.
+func main() {
+	// This is a simple print statement.
+	if err := println("hello"); err != nil { // check for error
+		panic(err) // panic if there is an error
+	}
+
+	// Demonstrating a multi-line comment.
+	/*
+		This is a multi-line comment.
+		It spans multiple lines.
+	*/
+	fmt.Println("This is a test.") // print a message
+}
