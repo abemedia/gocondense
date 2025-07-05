@@ -10,7 +10,10 @@ type GenericStruct[
 type GenericFunc[
 	T any,
 	U comparable,
-] func(T, U) bool
+] func(
+	T,
+	U,
+) bool
 
 type GenericInterface[
 	T any,
