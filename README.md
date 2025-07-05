@@ -7,12 +7,12 @@
 [![CI](https://github.com/abemedia/gocondense/actions/workflows/test.yml/badge.svg)](https://github.com/abemedia/gocondense/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/abemedia/gocondense)](https://goreportcard.com/report/github.com/abemedia/gocondense)
 
-A configurable Go code formatter that condenses multi-line constructs into single-line constructs where appropriate, improving code density while preserving readability, comments, and semantics.
+A configurable Go code formatter that condenses multi-line constructs into single lines where appropriate, improving code density while maintaining readability and respecting specified formatting constraints.
 
 ## Features
 
 - **Configurable**: Fine-grained control over which constructs to condense
-- **Flexible Limits**: Set maximum line length and item count globally or per-feature
+- **Flexible Limits**: Set maximum line length and key-value pair limits
 - **Preserves Comments**: All comments are preserved in their original positions
 - **Semantic Safety**: No changes to code semantics or behavior
 - **CLI and Library**: Available as both a command-line tool and Go library
@@ -313,92 +313,49 @@ cat myfile.go | gocondense
 
 ### Configuration Options
 
-#### Global Settings
+| Flag              | Description                                           | Default |
+| ----------------- | ----------------------------------------------------- | ------- |
+| `--max-len`       | Maximum line length before keeping multi-line         | 80      |
+| `--tab-width`     | Width of tab character for length calculation         | 4       |
+| `--max-key-value` | Maximum key-value pairs per line for structs and maps | 3       |
+| `--enable`        | Comma-separated list of features to enable            | "all"   |
+| `--disable`       | Comma-separated list of features to disable           | ""      |
 
-| Flag          | Description                                       | Default      |
-| ------------- | ------------------------------------------------- | ------------ |
-| `--max-len`   | Maximum line length before keeping multi-line     | 80           |
-| `--max-items` | Maximum number of items before keeping multi-line | 0 (no limit) |
-| `--tab-width` | Width of tab character for length calculation     | 4            |
-| `--enable`    | Comma-separated list of features to enable        | "all"        |
-| `--disable`   | Comma-separated list of features to disable       | ""           |
+#### Supported Features
 
-#### Feature-Specific Overrides
-
-You can override global settings for specific features:
-
-| Flag                       | Description                                  |
-| -------------------------- | -------------------------------------------- |
-| `--declarations.max-len`   | Override max-len for declarations            |
-| `--declarations.max-items` | Override max-items for declarations          |
-| `--types.max-len`          | Override max-len for type parameters         |
-| `--types.max-items`        | Override max-items for type parameters       |
-| `--funcs.max-len`          | Override max-len for function declarations   |
-| `--funcs.max-items`        | Override max-items for function declarations |
-| `--literals.max-len`       | Override max-len for function literals       |
-| `--literals.max-items`     | Override max-items for function literals     |
-| `--calls.max-len`          | Override max-len for function calls          |
-| `--calls.max-items`        | Override max-items for function calls        |
-| `--structs.max-len`        | Override max-len for struct literals         |
-| `--structs.max-items`      | Override max-items for struct literals       |
-| `--slices.max-len`         | Override max-len for slice literals          |
-| `--slices.max-items`       | Override max-items for slice literals        |
-| `--maps.max-len`           | Override max-len for map literals            |
-| `--maps.max-items`         | Override max-items for map literals          |
+- `declarations` - Single-item declaration groups
+- `types` - Generic type parameters
+- `funcs` - Function declarations
+- `literals` - Function literals
+- `calls` - Function calls
+- `structs` - Struct literals
+- `slices` - Slice/array literals
+- `maps` - Map literals
+- `all` - All features
 
 ### Examples
 
-**Limit line length to 120 characters:**
-
-```bash
-gocondense --max-len 120 myfile.go
-```
-
-**Allow maximum 3 items per line:**
-
-```bash
-gocondense --max-items 3 myfile.go
-```
-
-**Only condense function calls and struct literals:**
+**Only condense specific features:**
 
 ```bash
 gocondense --enable calls,structs myfile.go
 ```
 
-**Condense everything except declarations:**
+**Exclude certain features:**
 
 ```bash
 gocondense --disable declarations myfile.go
 ```
 
-**Allow more items for function calls than other constructs:**
+**Custom limits:**
 
 ```bash
-gocondense --max-items 2 --calls.max-items 5 myfile.go
+gocondense --max-len 120 --tab-width 2 --max-key-value 5 myfile.go
 ```
-
-**Use longer lines for struct literals:**
-
-```bash
-gocondense --max-len 80 --structs.max-len 120 myfile.go
-```
-
-### Available Features
-
-- `declarations` - Declaration groups (import, var, const, type)
-- `types` - Type parameters and instantiations
-- `funcs` - Function declarations
-- `literals` - Function literals
-- `calls` - Function calls
-- `structs` - Struct literals
-- `slices` - Slice and array literals
-- `maps` - Map literals
-- `all` - All features combined
 
 ## Go Library
 
-### Basic Usage
+### Getting Started
 
 ```go
 package main
@@ -444,10 +401,10 @@ import (
 
 func main() {
     config := &gocondense.Config{
-        MaxLen:   120,            // Allow longer lines
-        MaxItems: 5,              // Allow up to 5 items per line
-        TabWidth: 4,              // Tab width for length calculation
-        Enable:   gocondense.All, // Enable all features
+        MaxLen:      120,            // Allow longer lines
+        MaxKeyValue: 5,              // Allow up to 5 key-value pairs per line
+        TabWidth:    4,              // Tab width for length calculation
+        Enable:      gocondense.All, // Enable all features
     }
 
     formatter := gocondense.New(config)
@@ -473,24 +430,5 @@ config := &gocondense.Config{
 config := &gocondense.Config{
     MaxLen: 80,
     Enable: gocondense.All &^ gocondense.Declarations, // All except declarations
-}
-```
-
-### Per-Feature Overrides
-
-```go
-config := &gocondense.Config{
-    MaxLen:   80,  // Global limit
-    MaxItems: 3,   // Global item limit
-    Enable:   gocondense.All,
-    Override: map[gocondense.Feature]gocondense.ConfigOverride{
-        gocondense.Calls: {
-            MaxLen:   120, // Allow longer lines for function calls
-            MaxItems: 6,   // Allow more arguments for function calls
-        },
-        gocondense.Structs: {
-            MaxItems: 2,   // Be more conservative with struct fields
-        },
-    },
 }
 ```
