@@ -1,16 +1,33 @@
 package main
 
-type receiver[
+type rec[
 	A string,
 	B int,
 	C bool,
-] struct{}
+] struct{
+}
 
-func (r *receiver[
+func (r *rec[
 	A,
 	B,
 	C,
-]) Example(
+]) Ptr(
+	a string,
+	b int,
+	c bool,
+) (
+	string,
+	int,
+	bool,
+) {
+	return a, b, c
+}
+
+func (r rec[
+	A,
+	B,
+	C,
+]) Val(
 	a string,
 	b int,
 	c bool,
