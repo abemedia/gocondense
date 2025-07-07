@@ -28,15 +28,14 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 		return true
 	}
 
-	if e.isSingleLine(node) {
-		return true
-	}
-
 	switch n := node.(type) {
 	case *ast.GenDecl:
-		newNode := e.replaceGenDecl(n)
-		if newNode != nil && newNode != node && e.canCondense(newNode) {
+		if newNode := e.replaceGenDecl(n); newNode != node && e.canCondense(newNode) {
 			e.removeLines(e.line(n.Pos()), e.line(n.End()))
+			c.Replace(newNode)
+		}
+	case *ast.ParenExpr:
+		if newNode := e.replaceParenExpr(n); newNode != node {
 			c.Replace(newNode)
 		}
 	case *ast.TypeSpec:
@@ -75,8 +74,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool {
 
 // replaceGenDecl replaces a GenDecl with a condensed version.
 func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
-	if !e.config.Enable.has(Declarations) || len(decl.Specs) > 1 || decl.Lparen == token.NoPos ||
-		e.isSingleLine(decl) || e.hasComments(decl) {
+	if !e.config.Enable.has(Declarations) || len(decl.Specs) > 1 || decl.Lparen == token.NoPos || e.hasComments(decl) {
 		return decl
 	}
 
@@ -85,6 +83,28 @@ func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
 		Tok:    decl.Tok,
 		TokPos: decl.TokPos,
 		Specs:  decl.Specs,
+	}
+}
+
+// replaceParenExpr recursively removes unnecessary parentheses.
+// This handles nested parentheses like ((a)) -> a in a single pass.
+// Uses a blacklist approach: only keeps parentheses for expressions that truly need them.
+func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr {
+	if !e.config.Enable.has(Parens) {
+		return paren
+	}
+
+	// Only keep parentheses for expressions that might need them for precedence/associativity.
+	switch paren.X.(type) {
+	case *ast.BinaryExpr:
+		return paren
+	case *ast.UnaryExpr:
+		return paren
+	default:
+		if p, ok := paren.X.(*ast.ParenExpr); ok {
+			return e.replaceParenExpr(p)
+		}
+		return paren.X
 	}
 }
 
