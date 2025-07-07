@@ -29,6 +29,7 @@ var features = map[string]gocondense.Feature{
 	"structs":      gocondense.Structs,
 	"slices":       gocondense.Slices,
 	"maps":         gocondense.Maps,
+	"parens":       gocondense.Parens,
 	"all":          gocondense.All,
 }
 

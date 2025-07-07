@@ -1,0 +1,32 @@
+package main
+
+func main() {
+	// Simple parentheses around identifiers and literals
+	x := (a) && (b)
+	y := (5) + (10)
+	z := (true) || (false)
+	
+	// Parentheses around binary expressions with different precedence
+	result1 := (a + b) * c
+	result2 := a * (b + c)
+	result3 := (a && b) || c
+	result4 := a && (b || c)
+	
+	// Unnecessary parentheses around simple expressions
+	simple := (variable)
+	literal := (42)
+	boolean := (true)
+	
+	// Nested parentheses
+	nested := ((a))
+	deepNested := (((a + b)))
+	
+	// Mixed scenarios
+	mixed := (a) + (b * c) - (d)
+	
+	// Unary expressions that need parentheses
+	unary1 := -(x + y)  // Should keep parentheses
+	unary2 := !(a && b) // Should keep parentheses
+	unary3 := -(value)  // Should remove parentheses around simple value
+	unary4 := !(flag)   // Should remove parentheses around simple value
+}

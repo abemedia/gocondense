@@ -129,8 +129,15 @@ const (
 	//   map[string]int{"apple": 1, "banana": 2, "cherry": 3}
 	Maps
 
+	// Parens enables removal of unnecessary parentheses around expressions.
+	// This converts expressions like:
+	//   x := (a) && (b && c)
+	// into:
+	//   x := a && (b && c)
+	Parens
+
 	// All enables condensing of all supported constructs.
-	All = Declarations | Types | Funcs | Literals | Calls | Structs | Slices | Maps
+	All = Declarations | Types | Funcs | Literals | Calls | Structs | Slices | Maps | Parens
 )
 
 // Config controls the behavior of the Go code formatter.
