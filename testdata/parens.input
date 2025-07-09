@@ -16,7 +16,11 @@ func main() {
 	simple := (variable)
 	literal := (42)
 	boolean := (true)
-	
+
+	// Unnecessary parentheses around types
+	valueType := (string)("foo")
+	pointerType := (*string)(nil)
+
 	// Nested parentheses
 	nested := ((a))
 	deepNested := (((a + b)))
