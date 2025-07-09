@@ -71,6 +71,32 @@ type ID int
 
 ---
 
+### Unnecessary Parentheses
+
+Removes unnecessary parentheses around simple expressions while preserving those needed for operator precedence.
+
+**Before:**
+
+```go
+x := (variable)      // Around identifiers
+y := (42)            // Around literals
+z := (string)("foo") // Type conversions
+nested := ((a))      // Nested parentheses
+unary := -(value)    // Simple unary operands
+```
+
+**After:**
+
+```go
+x := variable      // Around identifiers
+y := 42            // Around literals
+z := string("foo") // Type conversions
+nested := a        // Nested parentheses
+unary := -value    // Simple unary operands
+```
+
+---
+
 ### Function Declarations
 
 Condenses function parameters and return values.
@@ -324,6 +350,7 @@ cat myfile.go | gocondense
 #### Supported Features
 
 - `declarations` - Single-item declaration groups
+- `parentheses` - Unnecessary parentheses removal
 - `types` - Generic type parameters
 - `funcs` - Function declarations
 - `literals` - Function literals
