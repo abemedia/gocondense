@@ -38,6 +38,11 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 		if newNode := e.replaceParenExpr(n); newNode != node {
 			c.Replace(newNode)
 		}
+	case *ast.FieldList:
+		switch c.Parent().(type) {
+		case *ast.FuncType, *ast.TypeSpec:
+			e.mergeFields(n)
+		}
 	case *ast.TypeSpec:
 		e.condenseFieldList(n.TypeParams, Types)
 	case *ast.FuncDecl:
@@ -132,6 +137,20 @@ func (e *condenser) condenseFieldList(list *ast.FieldList, feature Feature) bool
 	}
 
 	return e.condenseNode(list)
+}
+
+// mergeFields merges adjacent fields with the same type (e.g. `a T, b T` → `a, b T`).
+func (e *condenser) mergeFields(list *ast.FieldList) {
+	if !e.isSingleLine(list) || e.hasComments(list) {
+		return
+	}
+	for i := len(list.List) - 1; i > 0; i-- {
+		a, b := list.List[i-1], list.List[i]
+		if len(a.Names) > 0 && len(b.Names) > 0 && equalExpr(a.Type, b.Type) {
+			a.Names = append(a.Names, b.Names...)
+			list.List = slices.Delete(list.List, i, i+1)
+		}
+	}
 }
 
 // condenseCompositeLit attempts to condense a composite literal.
@@ -348,7 +367,7 @@ func (e *condenser) condenseFuncType(funcType *ast.FuncType, feature Feature) bo
 		first = false
 	}
 
-	return first == true
+	return first
 }
 
 // hasCommentsInRange checks if there are any comments between the given positions.
@@ -445,6 +464,83 @@ func (e *condenser) condenseNode(node ast.Node) bool {
 	}
 
 	return e.isSingleLine(node)
+}
+
+func isComplexExpr(expr ast.Expr) bool {
+	switch n := expr.(type) {
+	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr:
+		return true
+	case *ast.InterfaceType:
+		return len(n.Methods.List) > 1
+	default:
+		return false
+	}
+}
+
+// equalExpr reports whether two AST type expressions are structurally equal.
+func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen,gocognit
+	if a == nil || b == nil {
+		return a == b
+	}
+	switch x := a.(type) {
+	case *ast.Ident:
+		y, ok := b.(*ast.Ident)
+		return ok && x.Name == y.Name
+	case *ast.StarExpr:
+		y, ok := b.(*ast.StarExpr)
+		return ok && equalExpr(x.X, y.X)
+	case *ast.SelectorExpr:
+		y, ok := b.(*ast.SelectorExpr)
+		return ok && equalExpr(x.X, y.X) && x.Sel.Name == y.Sel.Name
+	case *ast.ArrayType:
+		y, ok := b.(*ast.ArrayType)
+		if !ok || (x.Len == nil) != (y.Len == nil) || x.Len != nil && !equalExpr(x.Len, y.Len) {
+			return false
+		}
+		return equalExpr(x.Elt, y.Elt)
+	case *ast.MapType:
+		y, ok := b.(*ast.MapType)
+		return ok && equalExpr(x.Key, y.Key) && equalExpr(x.Value, y.Value)
+	case *ast.ChanType:
+		y, ok := b.(*ast.ChanType)
+		return ok && x.Dir == y.Dir && equalExpr(x.Value, y.Value)
+	case *ast.IndexExpr:
+		y, ok := b.(*ast.IndexExpr)
+		return ok && equalExpr(x.X, y.X) && equalExpr(x.Index, y.Index)
+	case *ast.IndexListExpr:
+		y, ok := b.(*ast.IndexListExpr)
+		return ok && equalExpr(x.X, y.X) && slices.EqualFunc(x.Indices, y.Indices, equalExpr)
+	case *ast.BasicLit:
+		y, ok := b.(*ast.BasicLit)
+		return ok && x.Kind == y.Kind && x.Value == y.Value
+	case *ast.Ellipsis:
+		y, ok := b.(*ast.Ellipsis)
+		return ok && equalExpr(x.Elt, y.Elt)
+	case *ast.InterfaceType:
+		y, ok := b.(*ast.InterfaceType)
+		return ok && slices.EqualFunc(x.Methods.List, y.Methods.List, func(xf, yf *ast.Field) bool {
+			return slices.EqualFunc(xf.Names, yf.Names, func(xi, yi *ast.Ident) bool {
+				return xi.Name == yi.Name
+			}) && equalExpr(xf.Type, yf.Type)
+		})
+	case *ast.FuncType:
+		y, ok := b.(*ast.FuncType)
+		return ok && equalFieldList(x.Params, y.Params) && equalFieldList(x.Results, y.Results)
+	default:
+		return false
+	}
+}
+
+func equalFieldList(a, b *ast.FieldList) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil || len(a.List) != len(b.List) {
+		return false
+	}
+	return slices.EqualFunc(a.List, b.List, func(x, y *ast.Field) bool {
+		return equalExpr(x.Type, y.Type)
+	})
 }
 
 func allOK(condensers ...bool) bool {

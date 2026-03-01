@@ -1,8 +1,8 @@
 package main
 
 func main() {
-	f := func(x int) int {
-		return x * 2
+	add := func(x, y int) int {
+		return x + y
 	}
-	println(f(5))
+	println(add(1, 2))
 }

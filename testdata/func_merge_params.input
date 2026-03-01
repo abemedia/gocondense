@@ -1,0 +1,113 @@
+package main
+
+import (
+	"io"
+	"sync/atomic"
+)
+
+type Pair[A any, B any] struct{}
+
+// ident: *ast.Ident
+func ident(
+	a int,
+	b int,
+) {
+}
+
+// star: *ast.StarExpr
+func star(
+	a *int,
+	b *int,
+) {
+}
+
+// selector: *ast.SelectorExpr
+func selector(
+	a io.Reader,
+	b io.Reader,
+) {
+}
+
+// slice: *ast.ArrayType (nil Len)
+func slice(
+	a []byte,
+	b []byte,
+) {
+}
+
+// array: *ast.ArrayType (BasicLit Len)
+func array(
+	a [8]byte,
+	b [8]byte,
+) {
+}
+
+// mapType: *ast.MapType
+func mapType(
+	a map[string]int,
+	b map[string]int,
+) {
+}
+
+// chanBidirectional: *ast.ChanType (BOTH)
+func chanBidirectional(
+	a chan int,
+	b chan int,
+) {
+}
+
+// chanReceive: *ast.ChanType (RECV)
+func chanReceive(
+	a <-chan int,
+	b <-chan int,
+) {
+}
+
+// chanSend: *ast.ChanType (SEND)
+func chanSend(
+	a chan<- int,
+	b chan<- int,
+) {
+}
+
+// indexExpr: *ast.IndexExpr
+func indexExpr(
+	a atomic.Pointer[int],
+	b atomic.Pointer[int],
+) {
+}
+
+// indexListExpr: *ast.IndexListExpr
+func indexListExpr(
+	a Pair[string, int],
+	b Pair[string, int],
+) {
+}
+
+// interfaceType: *ast.InterfaceType (empty)
+func emptyInterface(
+	a interface{},
+	b interface{},
+) {
+}
+
+// interfaceType: *ast.InterfaceType (single method)
+func interfaceType(
+	a interface{ Error() string },
+	b interface{ Error() string },
+) {
+}
+
+// funcType: *ast.FuncType
+func funcType(
+	a func(int) int,
+	b func(int) int,
+) {
+}
+
+// ellipsis: *ast.Ellipsis (variadic inside func type)
+func ellipsis(
+	a func(...int),
+	b func(...int),
+) {
+}

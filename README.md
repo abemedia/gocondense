@@ -104,11 +104,13 @@ Condenses function parameters and return values.
 **Before:**
 
 ```go
-func Add(
-    a int,
-    b int,
+func Add[
+    T ~int,
+](
+    a T,
+    b T,
 ) (
-    result int,
+    result T,
     err error,
 ) {
     return a + b, nil
@@ -118,7 +120,7 @@ func Add(
 **After:**
 
 ```go
-func Add(a int, b int) (result int, err error) {
+func Add[T ~int](a, b T) (result T, err error) {
     return a + b, nil
 }
 ```
@@ -150,7 +152,7 @@ callback := func(
 **After:**
 
 ```go
-callback := func(x int, y int) int {
+callback := func(x, y int) int {
     return x + y
 }
 ```
