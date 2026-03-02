@@ -1,0 +1,55 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  BENCH_COUNT: 10
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run benchmark
+        run: |
+          go test -run ^$ -bench=. -benchmem -count=${{ env.BENCH_COUNT }} ./... | tee after
+
+      - name: Run benchmark for base code
+        run: |
+          git fetch --quiet origin master ${{ github.event.pull_request.base.sha }}
+          git reset --quiet --hard ${{ github.event.pull_request.base.sha }}
+          go test -run ^$ -bench=. -benchmem -count=${{ env.BENCH_COUNT }} ./... | tee before
+
+      - name: Compare benchmarks
+        id: bench
+        run: |
+          go run golang.org/x/perf/cmd/benchstat@latest before after | tee diff
+          printf 'diff<<EOF\n%s\nEOF\n' "$(cat diff)" >> $GITHUB_OUTPUT
+
+      - name: Create comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmarks
+          message: |
+            ### Benchmark Results
+            ```
+            ${{ steps.bench.outputs.diff }}
+            ```

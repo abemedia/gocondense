@@ -62,6 +62,12 @@ tasks:
     cmds:
       - go test -update ./...
 
+  benchmark:
+    desc: Run benchmarks
+    aliases: [bm, bench]
+    cmds:
+      - go test -run ^$ -bench=. -benchmem -count={{.count | default "1"}} ./...
+
   install:
     desc: Install gocondense
     aliases: [i]
