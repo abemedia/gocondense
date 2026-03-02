@@ -1,0 +1,68 @@
+package main
+
+import (
+	"io"
+	"sync/atomic"
+)
+
+type Pair[A, B any] struct{}
+
+// ident: *ast.Ident
+func ident(a, b int) {
+}
+
+// star: *ast.StarExpr
+func star(a, b *int) {
+}
+
+// selector: *ast.SelectorExpr
+func selector(a, b io.Reader) {
+}
+
+// slice: *ast.ArrayType (nil Len)
+func slice(a, b []byte) {
+}
+
+// array: *ast.ArrayType (BasicLit Len)
+func array(a, b [8]byte) {
+}
+
+// mapType: *ast.MapType
+func mapType(a, b map[string]int) {
+}
+
+// chanBidirectional: *ast.ChanType (BOTH)
+func chanBidirectional(a, b chan int) {
+}
+
+// chanReceive: *ast.ChanType (RECV)
+func chanReceive(a, b <-chan int) {
+}
+
+// chanSend: *ast.ChanType (SEND)
+func chanSend(a, b chan<- int) {
+}
+
+// indexExpr: *ast.IndexExpr
+func indexExpr(a, b atomic.Pointer[int]) {
+}
+
+// indexListExpr: *ast.IndexListExpr
+func indexListExpr(a, b Pair[string, int]) {
+}
+
+// interfaceType: *ast.InterfaceType (empty)
+func emptyInterface(a, b interface{}) {
+}
+
+// interfaceType: *ast.InterfaceType (single method)
+func interfaceType(a, b interface{ Error() string }) {
+}
+
+// funcType: *ast.FuncType
+func funcType(a, b func(int) int) {
+}
+
+// ellipsis: *ast.Ellipsis (variadic inside func type)
+func ellipsis(a, b func(...int)) {
+}

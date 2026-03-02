@@ -228,12 +228,3 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
-
-func isComplexExpr(expr ast.Expr) bool {
-	switch expr.(type) {
-	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr, *ast.InterfaceType:
-		return true
-	default:
-		return false
-	}
-}

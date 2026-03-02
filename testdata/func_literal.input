@@ -1,10 +1,11 @@
 package main
 
 func main() {
-	f := func(
+	add := func(
 		x int,
+		y int,
 	) int {
-		return x * 2
+		return x + y
 	}
-	println(f(5))
+	println(add(1, 2))
 }
