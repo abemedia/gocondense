@@ -159,6 +159,48 @@ callback := func(x, y int) int {
 
 ---
 
+### Block Statements
+
+Removes blank lines at the beginning and end of block statements. Blank lines adjacent to comments are preserved.
+
+**Before:**
+
+```go
+func add(a, b int) int {
+
+    return a + b
+
+}
+
+callback := func(x int) {
+
+    // validate
+    if x < 0 {
+
+        return
+
+    }
+
+}
+```
+
+**After:**
+
+```go
+func add(a, b int) int {
+    return a + b
+}
+
+callback := func(x int) {
+    // validate
+    if x < 0 {
+        return
+    }
+}
+```
+
+---
+
 ### Function Calls
 
 Condenses function call arguments.
