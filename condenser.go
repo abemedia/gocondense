@@ -67,6 +67,8 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool {
 	}
 	delete(e.addLines, node)
 
+	// If condensing the signature collapsed the body's apparent span to zero,
+	// restore it so an enclosing call does not fold the body onto a single line.
 	curSize := e.line(node.End()) - e.line(node.Pos())
 	prevSize := lines[1] - lines[0]
 	for curSize < prevSize {
@@ -258,6 +260,7 @@ func (e *condenser) condenseExpr(expr ast.Expr) bool {
 	}
 }
 
+// condenseBasicLit attempts to condense a basic literal.
 func (e *condenser) condenseBasicLit(lit *ast.BasicLit) bool {
 	if lit.Kind != token.STRING || len(lit.Value) < 2 || lit.Value[0] != '`' {
 		return e.condenseNode(lit) // If it's not a raw string literal, we can condense it.
@@ -407,6 +410,8 @@ func (e *condenser) removeLines(fromLine, toLine int) {
 	}
 }
 
+// addNewline inserts a new line break at the given position in the token file.
+// It is a no-op if a line already starts at that position.
 func (e *condenser) addNewline(pos token.Pos) {
 	offset := e.fset.Position(pos).Offset
 
@@ -466,6 +471,9 @@ func (e *condenser) condenseNode(node ast.Node) bool {
 	return e.isSingleLine(node)
 }
 
+// isComplexExpr reports whether an expression is too complex to condense onto
+// a single line alongside other elements. Composite/func literals and calls
+// are always complex; interfaces are complex when they have more than one method.
 func isComplexExpr(expr ast.Expr) bool {
 	switch n := expr.(type) {
 	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr:
@@ -531,6 +539,7 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen,gocognit
 	}
 }
 
+// equalFieldList reports whether two field lists are structurally equal by type.
 func equalFieldList(a, b *ast.FieldList) bool {
 	if a == nil && b == nil {
 		return true
@@ -543,6 +552,7 @@ func equalFieldList(a, b *ast.FieldList) bool {
 	})
 }
 
+// allOK reports whether all of the given condense results were successful.
 func allOK(condensers ...bool) bool {
 	return !slices.Contains(condensers, false)
 }
