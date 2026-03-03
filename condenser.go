@@ -47,6 +47,8 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 		e.condenseFieldList(n.TypeParams, Types)
 	case *ast.FuncDecl:
 		e.condenseFuncDecl(n)
+	case *ast.BlockStmt:
+		e.condenseBlockStmt(n)
 	case ast.Expr:
 		e.condenseExpr(n)
 	}
@@ -211,9 +213,6 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) bool {
 
 // condenseExpr recursively condenses expressions.
 func (e *condenser) condenseExpr(expr ast.Expr) bool {
-	if e.hasComments(expr) {
-		return false
-	}
 	if e.isSingleLine(expr) {
 		return true
 	}
@@ -221,28 +220,24 @@ func (e *condenser) condenseExpr(expr ast.Expr) bool {
 	case *ast.BasicLit:
 		return e.condenseBasicLit(n)
 	case *ast.BinaryExpr:
-		return allOK(e.condenseExpr(n.X), e.condenseExpr(n.Y))
+		return !e.hasComments(n) && allOK(e.condenseExpr(n.X), e.condenseExpr(n.Y))
 	case *ast.CallExpr:
 		return e.condenseCallExpr(n)
 	case *ast.CompositeLit:
 		return e.condenseCompositeLit(n)
 	case *ast.FuncLit:
 		return e.condenseFuncLit(n)
-	case *ast.FuncType:
-		return false
-	case *ast.InterfaceType:
+	case *ast.FuncType, *ast.InterfaceType:
 		return false
 	case *ast.KeyValueExpr:
-		return allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
+		return !e.hasComments(n) && allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
 	case *ast.MapType:
-		return allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
+		return !e.hasComments(n) && allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
 	case *ast.StructType:
 		if !e.config.Enable.has(Structs) || len(n.Fields.List) > 0 {
 			return false
 		}
-		return e.condenseNode(expr)
-	case *ast.BadExpr:
-		return false
+		return e.condenseNode(n)
 	// case *ast.ArrayType:
 	// case *ast.ChanType:
 	// case *ast.Ellipsis:
@@ -256,7 +251,7 @@ func (e *condenser) condenseExpr(expr ast.Expr) bool {
 	// case *ast.StarExpr:
 	// case *ast.TypeAssertExpr:
 	default:
-		return e.condenseNode(expr)
+		return !e.hasComments(n) && e.condenseNode(n)
 	}
 }
 
@@ -329,6 +324,54 @@ func (e *condenser) condenseFuncLit(lit *ast.FuncLit) bool {
 	return e.condenseFuncType(lit.Type, Literals) && len(lit.Body.List) <= 1
 }
 
+// condenseBlockStmt removes empty leading and trailing lines from a block statement.
+// Blank lines are stripped one at a time from each brace inward, stopping when a
+// comment is encountered so that blank lines adjacent to comments are preserved.
+func (e *condenser) condenseBlockStmt(block *ast.BlockStmt) {
+	lbraceLine := e.line(block.Lbrace)
+	rbraceLine := e.line(block.Rbrace)
+
+	// Strip leading blank lines up to the first comment or statement.
+	firstLine := rbraceLine
+	if len(block.List) > 0 {
+		firstLine = e.line(block.List[0].Pos())
+	}
+	leading := 0
+	for l := lbraceLine + 1; l < firstLine; l++ {
+		if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+			break
+		}
+		leading++
+	}
+	e.removeLines(lbraceLine, lbraceLine+leading)
+
+	// Re-read after possible leading removal.
+	rbraceLine = e.line(block.Rbrace)
+	lastLine := lbraceLine // fallback for empty block
+	if len(block.List) > 0 {
+		lastLine = e.line(block.List[len(block.List)-1].End())
+	}
+	trailing := 0
+	for l := rbraceLine - 1; l > lastLine; l-- {
+		if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+			break
+		}
+		trailing++
+	}
+	e.removeLines(rbraceLine-trailing-1, rbraceLine-1)
+
+	// If this block is a function literal body protected by addLines, update the
+	// stored span to reflect blank-line removal so applyPost's guard only fires
+	// if the body is collapsed further by an enclosing expression.
+	// Do not update if the body has already been collapsed (span == 0): in that
+	// case the original span must be preserved so applyPost can still fire.
+	if _, ok := e.addLines[block]; ok {
+		if span := e.line(block.End()) - e.line(block.Pos()); span > 0 {
+			e.addLines[block] = [2]int{e.line(block.Pos()), e.line(block.End())}
+		}
+	}
+}
+
 // condenseFuncType attempts to condense a function type.
 func (e *condenser) condenseFuncType(funcType *ast.FuncType, feature Feature) bool {
 	if !e.config.Enable.has(feature) {
@@ -373,10 +416,10 @@ func (e *condenser) condenseFuncType(funcType *ast.FuncType, feature Feature) bo
 	return first
 }
 
-// hasCommentsInRange checks if there are any comments between the given positions.
+// hasCommentsInRange checks if any comment overlaps with the given position range.
 func (e *condenser) hasCommentsInRange(start, end token.Pos) bool {
 	for _, cg := range e.file.Comments {
-		if cg.Pos() >= start && cg.End() <= end {
+		if cg.Pos() <= end && cg.End() >= start {
 			return true
 		}
 	}
@@ -486,7 +529,7 @@ func isComplexExpr(expr ast.Expr) bool {
 }
 
 // equalExpr reports whether two AST type expressions are structurally equal.
-func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen,gocognit
+func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -502,10 +545,7 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen,gocognit
 		return ok && equalExpr(x.X, y.X) && x.Sel.Name == y.Sel.Name
 	case *ast.ArrayType:
 		y, ok := b.(*ast.ArrayType)
-		if !ok || (x.Len == nil) != (y.Len == nil) || x.Len != nil && !equalExpr(x.Len, y.Len) {
-			return false
-		}
-		return equalExpr(x.Elt, y.Elt)
+		return ok && equalExpr(x.Len, y.Len) && equalExpr(x.Elt, y.Elt)
 	case *ast.MapType:
 		y, ok := b.(*ast.MapType)
 		return ok && equalExpr(x.Key, y.Key) && equalExpr(x.Value, y.Value)
