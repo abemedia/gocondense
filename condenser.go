@@ -71,14 +71,11 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool {
 
 	// If condensing the signature collapsed the body's apparent span to zero,
 	// restore it so an enclosing call does not fold the body onto a single line.
-	curSize := e.line(node.End()) - e.line(node.Pos())
-	prevSize := lines[1] - lines[0]
-	for curSize < prevSize {
+	if e.line(node.End())-e.line(node.Pos()) < lines[1]-lines[0] {
 		e.addNewline(node.Pos() + 1)
-		curSize++
 	}
 
-	return len(e.addLines) > 0
+	return true
 }
 
 // replaceGenDecl replaces a GenDecl with a condensed version.
@@ -488,7 +485,9 @@ func (e *condenser) canCondense(node ast.Node) bool {
 
 	lines := bytes.SplitSeq(buf.Bytes(), []byte{'\n'})
 	for line := range lines {
-		length := len(line) + bytes.Count(line, []byte{'\t'})*tabWidth - 1
+		// Each tab is already counted as 1 byte by len(line), so we add (tabWidth-1)
+		// per tab to get the correct visual width without double-counting.
+		length := len(line) + bytes.Count(line, []byte{'\t'})*(tabWidth-1)
 		if length > maxLen {
 			return false // If any line exceeds MaxLen, we cannot condense.
 		}
