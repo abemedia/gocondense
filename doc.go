@@ -4,12 +4,14 @@
 //
 // The formatter can process various Go constructs including:
 //   - Declaration groups: Convert multi-line single-item declarations to single-line
-//   - Function signatures: Condense parameter lists and return values
+//   - Function signatures: Condense parameter lists and return values, and merge adjacent same-type parameters
 //   - Function literals: Compact anonymous function definitions
 //   - Struct literals: Convert multi-line struct initialization to single-line
+//   - Map literals: Condense map definitions
 //   - Slice/array literals: Condense slice and array definitions
 //   - Function calls: Compact multi-line function invocations
 //   - Generic type parameters: Condense type parameter lists
+//   - Parentheses: Remove unnecessary parentheses
 //
 // The package respects user-defined constraints such as maximum line length,
 // maximum number of key-value pairs, and feature-specific controls. It preserves
