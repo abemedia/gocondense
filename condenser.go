@@ -16,6 +16,7 @@ type condenser struct {
 	fset      *token.FileSet
 	file      *ast.File
 	tokenFile *token.File
+	buf       *bytes.Buffer
 }
 
 // applyPre is called before visiting children nodes.
@@ -398,12 +399,12 @@ func (e *condenser) canCondense(node ast.Node) bool {
 		tabWidth = DefaultConfig.TabWidth
 	}
 
-	var buf bytes.Buffer
-	if err := format.Node(&buf, e.fset, node); err != nil {
+	e.buf.Reset()
+	if err := format.Node(e.buf, e.fset, node); err != nil {
 		return true
 	}
 
-	lines := bytes.SplitSeq(buf.Bytes(), []byte{'\n'})
+	lines := bytes.SplitSeq(e.buf.Bytes(), []byte{'\n'})
 	for line := range lines {
 		// Each tab is already counted as 1 byte by len(line), so we add (tabWidth-1)
 		// per tab to get the correct visual width without double-counting.
