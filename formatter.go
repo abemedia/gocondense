@@ -216,10 +216,9 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 		fset:      fset,
 		file:      file,
 		tokenFile: fset.File(file.Pos()),
-		addLines:  map[ast.Node][2]int{},
 	}
 
-	astutil.Apply(file, editor.applyPre, editor.applyPost)
+	astutil.Apply(file, editor.applyPre, nil)
 
 	var buf bytes.Buffer
 	if err := format.Node(&buf, fset, file); err != nil {

@@ -23,9 +23,12 @@ func main() {
 		{Name: "Bob", Age: 25},
 	}
 
-	adults := processData(people, func(p Person) bool {
-		return p.Age >= 18
-	})
+	adults := processData(
+		people,
+		func(p Person) bool {
+			return p.Age >= 18
+		},
+	)
 
 	fmt.Println(adults)
 }
