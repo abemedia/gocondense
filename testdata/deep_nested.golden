@@ -1,0 +1,78 @@
+package main
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+type Item struct {
+	Name  string
+	Value int
+}
+
+type Config struct {
+	Filter    func(Item) bool
+	Transform func(Item) Item
+}
+
+type Pipeline struct {
+	items []Item
+}
+
+func NewPipeline(items []Item, cfg Config) *Pipeline {
+	var result []Item
+	for _, item := range items {
+		if cfg.Filter(item) {
+			result = append(result, cfg.Transform(item))
+		}
+	}
+	return &Pipeline{items: result}
+}
+
+func (p *Pipeline) Items() []Item { return p.items }
+
+func main() {
+	thresholds := []int{3, 7, 15}
+
+	items := []Item{
+		{Name: "alpha", Value: 10},
+		{Name: "beta", Value: 5},
+		{Name: "gamma", Value: 20},
+	}
+
+	// Single deeply nested expression combining:
+	//   - call with struct literal arg (Config) whose KeyValueExprs have FuncLit values
+	//   - FuncLit bodies that contain nested calls with their own FuncLit args
+	//   - BinaryExpr, IndexExpr, SelectorExpr inside those bodies
+	//   - multi-statement FuncLit body (strings.Map callback)
+	//   - chained method call (.Items()) on the result
+	result := NewPipeline(
+		items,
+		Config{
+			Filter: func(item Item) bool {
+				return item.Value > sort.Search(
+					len(thresholds),
+					func(i int) bool {
+						return thresholds[i] >= 7
+					},
+				)
+			},
+			Transform: func(item Item) Item {
+				item.Name = strings.Map(
+					func(r rune) rune {
+						if r >= 'a' && r <= 'z' {
+							return r - 32
+						}
+						return r
+					},
+					item.Name,
+				)
+				return item
+			},
+		},
+	).
+		Items()
+
+	fmt.Println(result)
+}

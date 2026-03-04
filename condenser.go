@@ -2,12 +2,10 @@ package gocondense
 
 import (
 	"bytes"
-	"fmt"
 	"go/ast"
 	"go/format"
 	"go/token"
 	"slices"
-	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -18,7 +16,6 @@ type condenser struct {
 	fset      *token.FileSet
 	file      *ast.File
 	tokenFile *token.File
-	addLines  map[ast.Node][2]int
 }
 
 // applyPre is called before visiting children nodes.
@@ -51,28 +48,6 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 		e.condenseBlockStmt(n)
 	case ast.Expr:
 		e.condenseExpr(n)
-	}
-
-	return true
-}
-
-// applyPost is called after visiting children nodes.
-func (e *condenser) applyPost(c *astutil.Cursor) bool {
-	node := c.Node()
-	if node == nil {
-		return true
-	}
-
-	lines, ok := e.addLines[node]
-	if !ok {
-		return true
-	}
-	delete(e.addLines, node)
-
-	// If condensing the signature collapsed the body's apparent span to zero,
-	// restore it so an enclosing call does not fold the body onto a single line.
-	if e.line(node.End())-e.line(node.Pos()) < lines[1]-lines[0] {
-		e.addNewline(node.Pos() + 1)
 	}
 
 	return true
@@ -209,15 +184,15 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) bool {
 }
 
 // condenseExpr recursively condenses expressions.
-func (e *condenser) condenseExpr(expr ast.Expr) bool {
+func (e *condenser) condenseExpr(expr ast.Expr) bool { //nolint:cyclop,funlen
 	if e.isSingleLine(expr) {
 		return true
 	}
 	switch n := expr.(type) {
 	case *ast.BasicLit:
-		return e.condenseBasicLit(n)
+		return false // Only multi-line raw strings reach here; can't condense without changing the value.
 	case *ast.BinaryExpr:
-		return !e.hasComments(n) && allOK(e.condenseExpr(n.X), e.condenseExpr(n.Y))
+		return e.condenseWithChildren(n, n.X, n.Y)
 	case *ast.CallExpr:
 		return e.condenseCallExpr(n)
 	case *ast.CompositeLit:
@@ -227,83 +202,59 @@ func (e *condenser) condenseExpr(expr ast.Expr) bool {
 	case *ast.FuncType, *ast.InterfaceType:
 		return false
 	case *ast.KeyValueExpr:
-		return !e.hasComments(n) && allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
+		return e.condenseWithChildren(n, n.Key, n.Value)
 	case *ast.MapType:
-		return !e.hasComments(n) && allOK(e.condenseExpr(n.Key), e.condenseExpr(n.Value))
+		return e.condenseWithChildren(n, n.Key, n.Value)
 	case *ast.StructType:
 		if !e.config.Enable.has(Structs) || len(n.Fields.List) > 0 {
+			for _, field := range n.Fields.List {
+				e.condenseExpr(field.Type)
+			}
 			return false
 		}
 		return e.condenseNode(n)
+	case *ast.SelectorExpr:
+		return e.condenseWithChildren(n, n.X)
+	case *ast.UnaryExpr:
+		return e.condenseWithChildren(n, n.X)
+	case *ast.StarExpr:
+		return e.condenseWithChildren(n, n.X)
+	case *ast.IndexExpr:
+		return e.condenseWithChildren(n, n.X, n.Index)
+	case *ast.IndexListExpr:
+		return e.condenseWithChildren(n, append([]ast.Expr{n.X}, n.Indices...)...)
+	case *ast.SliceExpr:
+		return e.condenseWithChildren(n, n.X, n.Low, n.High, n.Max)
+	case *ast.TypeAssertExpr:
+		return e.condenseWithChildren(n, n.X, n.Type)
+	case *ast.ParenExpr:
+		return e.condenseWithChildren(n, n.X)
 	// case *ast.ArrayType:
 	// case *ast.ChanType:
 	// case *ast.Ellipsis:
 	// case *ast.Ident:
-	// case *ast.IndexExpr:
-	// case *ast.IndexListExpr:
-	// case *ast.ParenExpr:
-	// case *ast.UnaryExpr:
-	// case *ast.SelectorExpr:
-	// case *ast.SliceExpr:
-	// case *ast.StarExpr:
-	// case *ast.TypeAssertExpr:
 	default:
 		return !e.hasComments(n) && e.condenseNode(n)
 	}
 }
 
-// condenseBasicLit attempts to condense a basic literal.
-func (e *condenser) condenseBasicLit(lit *ast.BasicLit) bool {
-	if lit.Kind != token.STRING || len(lit.Value) < 2 || lit.Value[0] != '`' {
-		return e.condenseNode(lit) // If it's not a raw string literal, we can condense it.
-	}
-
-	if strings.Contains(lit.Value, "\n") {
-		return false // If it contains newlines, we cannot condense it.
-	}
-
-	return e.condenseNode(lit)
-}
 
 // condenseCallExpr attempts to condense a function call.
 func (e *condenser) condenseCallExpr(call *ast.CallExpr) bool {
-	if !e.config.Enable.has(Calls) || e.hasComments(call) {
+	if !e.config.Enable.has(Calls) {
 		return false
 	}
-	if e.isSingleLine(call) {
-		return true
-	}
-
-	e.condenseExpr(call.Fun)
-
-	canCondense := true
-
-	for _, arg := range call.Args {
-		if ok := e.condenseExpr(arg); !ok {
-			canCondense = false
-		}
-	}
-
-	if !canCondense {
-		return false
-	}
-
-	return e.condenseNode(call)
+	children := append([]ast.Expr{call.Fun}, call.Args...)
+	return e.condenseWithChildren(call, children...)
 }
 
 // condenseFuncDecl attempts to condense a function declaration.
-func (e *condenser) condenseFuncDecl(decl *ast.FuncDecl) bool {
-	if !e.config.Enable.has(Funcs) {
-		return false
+func (e *condenser) condenseFuncDecl(decl *ast.FuncDecl) {
+	if !e.config.Enable.has(Funcs) || e.isSingleLine(decl) {
+		return
 	}
-	if e.isSingleLine(decl) {
-		return true
-	}
-
-	return allOK(
-		e.condenseFieldList(decl.Recv, Funcs),
-		e.condenseFuncType(decl.Type, Funcs),
-	)
+	e.condenseFieldList(decl.Recv, Funcs)
+	e.condenseFuncType(decl.Type, Funcs)
 }
 
 // condenseFuncLit attempts to condense a function literal.
@@ -314,9 +265,6 @@ func (e *condenser) condenseFuncLit(lit *ast.FuncLit) bool {
 	if e.isSingleLine(lit) {
 		return true
 	}
-
-	// Protect the function body from being condensed by parent expressions.
-	e.addLines[lit.Body] = [2]int{e.line(lit.Body.Pos()), e.line(lit.Body.End())}
 
 	return e.condenseFuncType(lit.Type, Literals) && len(lit.Body.List) <= 1
 }
@@ -356,17 +304,6 @@ func (e *condenser) condenseBlockStmt(block *ast.BlockStmt) {
 		trailing++
 	}
 	e.removeLines(rbraceLine-trailing-1, rbraceLine-1)
-
-	// If this block is a function literal body protected by addLines, update the
-	// stored span to reflect blank-line removal so applyPost's guard only fires
-	// if the body is collapsed further by an enclosing expression.
-	// Do not update if the body has already been collapsed (span == 0): in that
-	// case the original span must be preserved so applyPost can still fire.
-	if _, ok := e.addLines[block]; ok {
-		if span := e.line(block.End()) - e.line(block.Pos()); span > 0 {
-			e.addLines[block] = [2]int{e.line(block.Pos()), e.line(block.End())}
-		}
-	}
 }
 
 // condenseFuncType attempts to condense a function type.
@@ -450,22 +387,6 @@ func (e *condenser) removeLines(fromLine, toLine int) {
 	}
 }
 
-// addNewline inserts a new line break at the given position in the token file.
-// It is a no-op if a line already starts at that position.
-func (e *condenser) addNewline(pos token.Pos) {
-	offset := e.fset.Position(pos).Offset
-
-	lines := e.tokenFile.Lines()
-	i, exists := slices.BinarySearch(lines, offset)
-	if exists {
-		return
-	}
-	lines = slices.Insert(lines, i, offset)
-	if !e.tokenFile.SetLines(lines) {
-		panic(fmt.Sprintf("could not set lines to %v", lines))
-	}
-}
-
 // canCondense checks if a node can be condensed without exceeding MaxLen.
 func (e *condenser) canCondense(node ast.Node) bool {
 	maxLen := e.config.MaxLen
@@ -513,6 +434,24 @@ func (e *condenser) condenseNode(node ast.Node) bool {
 	return e.isSingleLine(node)
 }
 
+// condenseWithChildren condenses each child expression, then attempts to
+// condense the parent node if all children are single-line and comment-free.
+func (e *condenser) condenseWithChildren(node ast.Node, children ...ast.Expr) bool {
+	allSingleLine := true
+	for _, child := range children {
+		if child == nil {
+			continue
+		}
+		if !e.condenseExpr(child) || !e.isSingleLine(child) {
+			allSingleLine = false
+		}
+	}
+	if !allSingleLine || e.hasComments(node) {
+		return false
+	}
+	return e.condenseNode(node)
+}
+
 // isComplexExpr reports whether an expression is too complex to condense onto
 // a single line alongside other elements. Composite/func literals and calls
 // are always complex; interfaces are complex when they have more than one method.
@@ -520,6 +459,8 @@ func isComplexExpr(expr ast.Expr) bool {
 	switch n := expr.(type) {
 	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr:
 		return true
+	case *ast.KeyValueExpr:
+		return isComplexExpr(n.Value)
 	case *ast.InterfaceType:
 		return len(n.Methods.List) > 1
 	default:
@@ -591,7 +532,3 @@ func equalFieldList(a, b *ast.FieldList) bool {
 	})
 }
 
-// allOK reports whether all of the given condense results were successful.
-func allOK(condensers ...bool) bool {
-	return !slices.Contains(condensers, false)
-}

@@ -1,0 +1,48 @@
+package main
+
+func main() {
+	// UnaryExpr
+	_ = !isValid(
+		1,
+		2,
+	)
+
+	// IndexExpr
+	_ = getSlice(
+		1,
+		2,
+	)[0]
+
+	// SliceExpr
+	_ = getSlice(
+		1,
+		2,
+	)[foo(
+		3,
+		4,
+	):bar(
+		5,
+		6,
+	)]
+
+	// TypeAssertExpr
+	_ = getValue(
+		1,
+		2,
+	).(map[
+	string]int)
+
+	// ParenExpr
+	_ = (add(
+		1,
+		2,
+	) + 3) * 4
+
+	// MapType
+	_ = make(map[
+	string]int)
+
+	// BasicLit (multi-line raw string)
+	_ = `hello
+world`
+}
