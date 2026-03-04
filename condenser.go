@@ -238,7 +238,6 @@ func (e *condenser) condenseExpr(expr ast.Expr) bool { //nolint:cyclop,funlen
 	}
 }
 
-
 // condenseCallExpr attempts to condense a function call.
 func (e *condenser) condenseCallExpr(call *ast.CallExpr) bool {
 	if !e.config.Enable.has(Calls) {
@@ -531,4 +530,3 @@ func equalFieldList(a, b *ast.FieldList) bool {
 		return equalExpr(x.Type, y.Type)
 	})
 }
-
