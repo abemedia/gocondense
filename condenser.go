@@ -40,7 +40,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	node := c.Node()
 	if node == nil {
 		return true
@@ -66,15 +66,17 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 		switch c.Parent().(type) {
 		case *ast.FuncType, *ast.TypeSpec:
 			e.mergeFields(n)
+		case *ast.StructType, *ast.InterfaceType:
+			trimBlock(e, n.Opening, n.Closing, n.List)
 		}
 	case *ast.BlockStmt:
-		e.condenseBlockStmt(n)
+		trimBlock(e, n.Lbrace, n.Rbrace, n.List)
+	case *ast.CaseClause:
+		trimBlock(e, n.Colon, n.End(), n.Body)
+	case *ast.CommClause:
+		trimBlock(e, n.Colon, n.End(), n.Body)
 	case *ast.CompositeLit:
 		e.condenseCompositeLit(n)
-	case *ast.StructType:
-		if e.config.Enable.has(Structs) && len(n.Fields.List) == 0 && !e.isSingleLine(n) {
-			e.condenseNode(n)
-		}
 	case *ast.CallExpr:
 		if e.config.Enable.has(Calls) && !e.isSingleLine(n) && e.isSingleLine(n.Fun) && !e.hasComments(n) &&
 			!slices.ContainsFunc(n.Args, func(arg ast.Expr) bool { return !e.isSingleLine(arg) }) {
@@ -196,9 +198,14 @@ func (e *condenser) mergeFields(list *ast.FieldList) {
 	}
 }
 
-// condenseCompositeLit attempts to collapse a multi-line struct, slice, array,
-// or map literal onto a single line.
+// condenseCompositeLit strips blank lines from composite literals and attempts
+// to collapse multi-line struct, slice, array, or map literals onto a single line.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
+	trimBlock(e, lit.Lbrace, lit.Rbrace, lit.Elts)
+	if len(lit.Elts) == 0 {
+		return
+	}
+
 	if e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
@@ -240,41 +247,49 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 	e.condenseNode(lit)
 }
 
-// condenseBlockStmt removes empty leading and trailing lines from a block statement.
-// Blank lines are stripped one at a time from each brace inward, stopping when a
-// comment is encountered so that blank lines adjacent to comments are preserved.
-func (e *condenser) condenseBlockStmt(block *ast.BlockStmt) {
-	lbraceLine := e.line(block.Lbrace)
-	rbraceLine := e.line(block.Rbrace)
+// trimBlock collapses empty block-like nodes and trims leading/trailing
+// blank lines from non-empty ones.
+//
+// TODO: convert to a method once https://github.com/golang/go/issues/77273 lands.
+func trimBlock[T ast.Node](e *condenser, start, end token.Pos, children []T) {
+	if len(children) == 0 && !e.hasCommentsInRange(start, end) {
+		e.removeLines(e.line(start), e.line(end))
+		return
+	}
 
-	// Strip leading blank lines up to the first comment or statement.
-	firstLine := rbraceLine
-	if len(block.List) > 0 {
-		firstLine = e.line(block.List[0].Pos())
+	// Determine first child start and last child end positions.
+	first, last := end, start
+	if len(children) > 0 {
+		first, last = children[0].Pos(), children[len(children)-1].End()
 	}
-	leading := 0
-	for l := lbraceLine + 1; l < firstLine; l++ {
-		if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-			break
-		}
-		leading++
-	}
-	e.removeLines(lbraceLine, lbraceLine+leading)
 
-	// Re-read after possible leading removal.
-	rbraceLine = e.line(block.Rbrace)
-	lastLine := lbraceLine // fallback for empty block
-	if len(block.List) > 0 {
-		lastLine = e.line(block.List[len(block.List)-1].End())
-	}
-	trailing := 0
-	for l := rbraceLine - 1; l > lastLine; l-- {
-		if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-			break
+	// Trim leading blank lines between the opening delimiter and the first child.
+	startLine := e.line(start)
+	firstLine := e.line(first)
+	if firstLine > startLine+1 {
+		leading := 0
+		for l := startLine + 1; l < firstLine; l++ {
+			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+				break
+			}
+			leading++
 		}
-		trailing++
+		e.removeLines(startLine, startLine+leading)
 	}
-	e.removeLines(rbraceLine-trailing-1, rbraceLine-1)
+
+	// Trim trailing blank lines between the last child and the closing delimiter.
+	endLine := e.line(end)
+	lastLine := e.line(last)
+	if endLine > lastLine+1 {
+		trailing := 0
+		for l := endLine - 1; l > lastLine; l-- {
+			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+				break
+			}
+			trailing++
+		}
+		e.removeLines(endLine-trailing-1, endLine-1)
+	}
 }
 
 // hasCommentsInRange reports whether any comment group overlaps [start, end].

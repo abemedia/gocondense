@@ -10,9 +10,11 @@ linters:
     - forcetypeassert
     - gochecknoglobals
     - gocyclo
+    - godox
     - mnd
     - nlreturn
     - noinlineerr
+    - nonamedreturns
     - paralleltest
     - varnamelen
     - wrapcheck

@@ -1,0 +1,74 @@
+package main
+
+// BlockStmt: empty
+func empty() {}
+
+// BlockStmt: no comment
+func noComment() {
+	x := 1
+}
+
+// BlockStmt: line comment
+func lineComment() {
+	// leading comment
+
+	x := 1
+
+	// trailing comment
+}
+
+// BlockStmt: block comment
+func blockComment() {
+	/*
+		leading comment
+	*/
+
+	x := 1
+
+	/*
+		trailing comment
+	*/
+}
+
+// BlockStmt: only comment
+func onlyComment() {
+	// only comment
+}
+
+// BlockStmt: nested
+func nestedBlocks() {
+	if true {
+		x := 1
+	}
+}
+
+// CaseClause
+func caseClause() {
+	switch {
+	case true:
+		x := 1
+	}
+}
+
+// CommClause
+func commClause(ch chan int) {
+	select {
+	case v := <-ch:
+		println(v)
+	}
+}
+
+// CompositeLit
+func compositeLit() {
+	_ = map[string]int{"a": 1}
+}
+
+// FieldList (struct)
+type s struct {
+	A int
+}
+
+// FieldList (interface)
+type i interface {
+	Foo()
+}
