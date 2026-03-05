@@ -1,0 +1,34 @@
+package main
+
+// Indentation: condensed call is 72 chars; fits at depth 2 (8+72=80) but not depth 3 (12+72=84).
+func indentation() {
+	if true {
+		processItems(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+		if true {
+			processItems(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		}
+	}
+}
+
+// Parent context: bare call fits at depth 1 (4+72=76) but "result := " prefix makes it too long (4+82=86).
+func parentContext() {
+	processItems(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	)
+	result := processItems(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	)
+	_ = result
+}

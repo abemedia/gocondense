@@ -1,0 +1,67 @@
+package main
+
+func main() {
+	// CallExpr with comment
+	_ = f(
+		a, // x
+		b,
+		c,
+	)
+
+	// BinaryExpr with comment
+	_ = a + // x
+		b
+
+	// SelectorExpr with comment
+	_ = obj. // x
+			Method
+
+	// IndexListExpr with comment
+	_ = g[ // x
+		int, string](1, "a")
+
+	// StarExpr with comment
+	_ = * // x
+	pointer
+
+	// UnaryExpr with comment
+	_ = !isValid(
+		1, // x
+		2,
+	)
+
+	// IndexExpr with comment
+	_ = getSlice(
+		1, // x
+		2,
+	)[0]
+
+	// SliceExpr with comment
+	_ = getSlice(
+		1, // x
+		2,
+	)[foo(
+		3, // x
+		4,
+	):bar(
+		5, // x
+		6,
+	)]
+
+	// TypeAssertExpr with comment
+	_ = getValue(
+		1, // x
+		2,
+	).(map[ // x
+	string]int)
+
+	// ParenExpr with comment
+	_ = (add(
+		1, // x
+		2,
+	) + 3) * 4
+
+	// MapType with comment
+	_ = make(map[ // x
+	string]int)
+}

@@ -211,20 +211,21 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 		return src, nil
 	}
 
-	editor := &condenser{
+	c := &condenser{
 		config:    f.config,
 		fset:      fset,
 		file:      file,
 		tokenFile: fset.File(file.Pos()),
-		addLines:  map[ast.Node][2]int{},
+		buf:       bytes.NewBuffer(make([]byte, 0, len(src))),
+		parents:   make([]ast.Node, 0, 32),
 	}
 
-	astutil.Apply(file, editor.applyPre, editor.applyPost)
+	astutil.Apply(file, c.applyPre, c.applyPost)
 
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, file); err != nil {
+	c.buf.Reset()
+	if err := format.Node(c.buf, fset, file); err != nil {
 		return nil, fmt.Errorf("failed to format AST: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return c.buf.Bytes(), nil
 }
