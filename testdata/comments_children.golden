@@ -1,0 +1,21 @@
+package main
+
+func main() {
+	// BinaryExpr: comment in gap, both operands condensable
+	_ = foo(1, 2) + // comment
+		bar(3, 4)
+
+	// CallExpr: comment after arg, children condensable
+	foo(
+		bar(1, 2), // comment
+		baz(3, 4),
+	)
+
+	// CallExpr: comment after arg, one child is FuncLit
+	foo(
+		func() {
+			doSomething()
+		}, // comment
+		bar(1, 2),
+	)
+}

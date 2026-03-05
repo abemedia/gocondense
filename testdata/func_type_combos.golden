@@ -1,0 +1,73 @@
+package example
+
+// All condensable.
+func All[T any](a T, b string) (string, error) {
+	return "", nil
+}
+
+// Params has comment.
+func TypeParamsAndResults[T any](
+	a T, // keep
+	b string,
+) (string, error) {
+	return "", nil
+}
+
+// TypeParams has comment.
+func ParamsAndResults[
+	T any, // keep
+](a T, b string) (string, error) {
+	return "", nil
+}
+
+// TypeParams and Params have comments.
+func ResultsOnly[
+	T any, // keep
+](
+	a T, // keep
+	b string,
+) (string, error) {
+	return "", nil
+}
+
+// Results has comment.
+func TypeParamsAndParams[T any](a T, b string) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}
+
+// Params and Results have comments.
+func TypeParamsOnly[T any](
+	a T, // keep
+	b string,
+) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}
+
+// TypeParams and Results have comments.
+func ParamsOnly[
+	T any, // keep
+](a T, b string) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}
+
+// All three have comments, nothing condenses.
+func NoneCondensable[
+	T any, // keep
+](
+	a T, // keep
+	b string,
+) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}

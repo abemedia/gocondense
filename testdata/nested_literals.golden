@@ -7,8 +7,14 @@ type Data struct {
 
 func main() {
 	data := []Data{
-		{Values: []string{"a", "b"}, Count: 2},
-		{Values: []string{"x", "y", "z"}, Count: 3},
+		{
+			Values: []string{"a", "b"},
+			Count:  2,
+		},
+		{
+			Values: []string{"x", "y", "z"},
+			Count:  3,
+		},
 	}
 	println(len(data))
 }
