@@ -1,0 +1,92 @@
+package example
+
+// Combo 1: all condensable.
+func All[
+	T any,
+](
+	a T,
+	b string,
+) (
+	string,
+	error,
+) {
+	return "", nil
+}
+
+// Combo 2: Params has comment.
+func TypeParamsAndResults[
+	T any,
+](
+	a T,    // keep
+	b string,
+) (
+	string,
+	error,
+) {
+	return "", nil
+}
+
+// Combo 3: TypeParams has comment.
+func ParamsAndResults[
+	T any, // keep
+](
+	a T,
+	b string,
+) (
+	string,
+	error,
+) {
+	return "", nil
+}
+
+// Combo 4: TypeParams and Params have comments.
+func ResultsOnly[
+	T any, // keep
+](
+	a T,    // keep
+	b string,
+) (
+	string,
+	error,
+) {
+	return "", nil
+}
+
+// Combo 5: Results has comment.
+func TypeParamsAndParams[
+	T any,
+](
+	a T,
+	b string,
+) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}
+
+// Combo 6: Params and Results have comments.
+func TypeParamsOnly[
+	T any,
+](
+	a T,    // keep
+	b string,
+) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}
+
+// Combo 7: TypeParams and Results have comments.
+func ParamsOnly[
+	T any, // keep
+](
+	a T,
+	b string,
+) (
+	string,
+	error, // keep
+) {
+	return "", nil
+}

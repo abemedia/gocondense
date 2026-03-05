@@ -308,46 +308,51 @@ func (e *condenser) condenseBlockStmt(block *ast.BlockStmt) {
 
 // condenseFuncType attempts to condense a function type.
 func (e *condenser) condenseFuncType(funcType *ast.FuncType, feature Feature) bool {
-	if !e.config.Enable.has(feature) {
-		return true
-	}
-	if e.isSingleLine(funcType) || funcType == nil {
+	if !e.config.Enable.has(feature) || e.isSingleLine(funcType) {
 		return true
 	}
 
-	lines := slices.Clone(e.tokenFile.Lines())
+	saved := slices.Clone(e.tokenFile.Lines())
 
-	// Attempt multiple combinations of condensing field lists
-	// to find the best fit without exceeding MaxLen.
-	combinations := [][]*ast.FieldList{
-		{funcType.TypeParams, funcType.Params, funcType.Results},
-		{funcType.TypeParams, funcType.Results},
-		{funcType.Params, funcType.Results},
-		{funcType.Results},
-		{funcType.TypeParams, funcType.Params},
-		{funcType.TypeParams},
-		{funcType.Params},
+	// Probe: condense each field list independently.
+	// Successful condensations modify the line table; failed ones are
+	// restored internally by condenseNode.
+	lists := [3]*ast.FieldList{funcType.TypeParams, funcType.Params, funcType.Results}
+	var ok [3]bool
+	for i, f := range lists {
+		ok[i] = f == nil || e.condenseFieldList(f, feature) //nolint:gosec // index bounded by [3]
 	}
-	success := 0
-	first := true
-	for _, fields := range combinations {
-		if slices.Contains(fields, nil) {
-			continue // Skip combinations with nil fields.
+
+	// Try combinations in preference order, skipping non-viable ones.
+	// The first combo (all) reuses the probe's line state; subsequent ones restore and re-condense.
+	combos := [...][3]bool{
+		{true, true, true},   // TypeParams + Params + Results
+		{true, false, true},  // TypeParams + Results
+		{false, true, true},  // Params + Results
+		{false, false, true}, // Results
+		{true, true, false},  // TypeParams + Params
+		{true, false, false}, // TypeParams
+		{false, true, false}, // Params
+	}
+	for i, c := range combos {
+		if (c[0] && !ok[0]) || (c[1] && !ok[1]) || (c[2] && !ok[2]) {
+			continue // Skip combos requiring non-condensable field lists.
 		}
-		for _, field := range fields {
-			if e.condenseFieldList(field, feature) {
-				success++
+		if i > 0 {
+			e.tokenFile.SetLines(append(e.tokenFile.Lines()[:0], saved...))
+			for j, include := range c {
+				if include {
+					e.condenseFieldList(lists[j], feature) //nolint:gosec // index bounded by [3]
+				}
 			}
 		}
 		if e.canCondense(funcType) {
-			return first && len(fields) == success // Return true if all fields were condensed successfully.
+			return i == 0 // Return true if all fields were condensed successfully.
 		}
-		e.tokenFile.SetLines(slices.Clone(lines))
-		success = 0
-		first = false
 	}
 
-	return first
+	e.tokenFile.SetLines(saved)
+	return false
 }
 
 // hasCommentsInRange checks if any comment overlaps with the given position range.
