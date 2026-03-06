@@ -2,6 +2,7 @@ package gocondense
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -28,18 +29,15 @@ type Config struct {
 	SkipGenerated bool
 }
 
-// DefaultConfig provides a sensible default configuration with a maximum
-// line length of 80 characters and a tab width of 4 spaces.
-var DefaultConfig = &Config{
-	MaxLen:   80,
-	TabWidth: 4,
-}
+var (
+	defaultConfig    = &Config{MaxLen: 80, TabWidth: 4}
+	defaultFormatter = New(defaultConfig)
+)
 
 // Format formats Go source code using the default configuration.
 // Returns the formatted source code or an error if parsing fails.
 func Format(src []byte) ([]byte, error) {
-	formatter := New(DefaultConfig)
-	return formatter.Format(src)
+	return defaultFormatter.Format(src)
 }
 
 // Formatter condenses Go code according to the specified configuration.
@@ -48,10 +46,12 @@ type Formatter struct {
 }
 
 // New creates a new formatter with the given configuration.
-// If config is nil, DefaultConfig is used.
+// If config is nil, the default configuration is used.
 func New(config *Config) *Formatter {
 	if config == nil {
-		config = DefaultConfig
+		config = defaultConfig
+	} else if config.MaxLen < 0 || config.TabWidth < 0 {
+		panic("gocondense: MaxLen and TabWidth must not be negative")
 	}
 	return &Formatter{config: config}
 }
@@ -73,7 +73,8 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 	}
 
 	c := &condenser{
-		config:    f.config,
+		maxLen:    cmp.Or(f.config.MaxLen, defaultConfig.MaxLen),
+		tabWidth:  cmp.Or(f.config.TabWidth, defaultConfig.TabWidth),
 		fset:      fset,
 		file:      file,
 		tokenFile: fset.File(file.Pos()),

@@ -184,3 +184,24 @@ func TestErrorCases(t *testing.T) {
 		})
 	}
 }
+
+func TestNewPanics(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *gocondense.Config
+	}{
+		{"negative_max_len", &gocondense.Config{MaxLen: -1}},
+		{"negative_tab_width", &gocondense.Config{TabWidth: -1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			gocondense.New(tt.config)
+		})
+	}
+}

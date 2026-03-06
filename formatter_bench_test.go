@@ -14,11 +14,10 @@ func BenchmarkFormat(b *testing.B) {
 	for _, n := range []int{100, 1000} {
 		src, lines := generateSrc(n)
 		b.Run(fmt.Sprintf("%d_LOC", lines), func(b *testing.B) {
-			f := gocondense.New(nil)
 			b.ReportAllocs()
 			b.SetBytes(int64(len(src)))
 			for b.Loop() {
-				out, err := f.Format(src)
+				out, err := gocondense.Format(src)
 				if err != nil {
 					b.Fatal(err)
 				}
