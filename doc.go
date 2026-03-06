@@ -1,37 +1,16 @@
-// Package gocondense provides a Go code formatter that condenses multi-line constructs
-// into single lines where appropriate, improving code density while maintaining
-// readability and respecting specified formatting constraints.
+// Package gocondense provides a Go code formatter that condenses multi-line
+// constructs onto single lines where they fit, reducing vertical noise while
+// preserving readability.
 //
-// The formatter can process various Go constructs including:
-//   - Declaration groups: Convert multi-line single-item declarations to single-line
-//   - Function signatures: Condense parameter lists and return values, and merge adjacent same-type parameters
-//   - Function literals: Compact anonymous function definitions
-//   - Struct literals: Convert multi-line struct initialization to single-line
-//   - Map literals: Condense map definitions
-//   - Slice/array literals: Condense slice and array definitions
-//   - Function calls: Compact multi-line function invocations
-//   - Generic type parameters: Condense type parameter lists
-//   - Parentheses: Remove unnecessary parentheses
+// Format a source file with default settings (80 columns, 4-wide tabs):
 //
-// The package respects user-defined constraints such as maximum line length,
-// maximum number of key-value pairs, and feature-specific controls. It preserves
-// comments and only transforms constructs that are safe to condense without
-// affecting code semantics or readability.
+//	formatted, err := gocondense.Format(src)
 //
-// Basic usage:
+// Use a custom configuration:
 //
-//	// Using default configuration
-//	formatted, err := gocondense.Format(sourceCode)
-//
-//	// Using custom configuration
-//	config := &gocondense.Config{
-//		MaxLen:      120,
-//		MaxKeyValue: 5,
-//		Enable:      gocondense.Funcs | gocondense.Calls,
-//	}
-//	formatter := gocondense.New(config)
-//	formatted, err := formatter.Format(sourceCode)
-//
-// The formatter supports fine-grained control through feature flags,
-// allowing users to enable or disable specific formatting behaviors.
+//	f := gocondense.New(&gocondense.Config{
+//		MaxLen:   120,
+//		TabWidth: 2,
+//	})
+//	formatted, err := f.Format(src)
 package gocondense
