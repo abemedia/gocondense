@@ -13,7 +13,8 @@ import (
 
 // condenser implements AST traversal callbacks that simplify and condense nodes.
 type condenser struct {
-	config      *Config
+	maxLen      int
+	tabWidth    int
 	fset        *token.FileSet
 	file        *ast.File
 	tokenFile   *token.File
@@ -352,16 +353,6 @@ func (e *condenser) removeLines(fromLine, toLine int) {
 // It formats the node via format.Node and checks every output line against
 // the limit, accounting for indentation and tab width.
 func (e *condenser) canCondense(node ast.Node) bool {
-	maxLen := e.config.MaxLen
-	if maxLen == 0 {
-		maxLen = DefaultConfig.MaxLen
-	}
-
-	tabWidth := e.config.TabWidth
-	if tabWidth == 0 {
-		tabWidth = DefaultConfig.TabWidth
-	}
-
 	e.buf.Reset()
 	if err := format.Node(e.buf, e.fset, node); err != nil {
 		panic("gocondense: format.Node failed: " + err.Error())
@@ -374,12 +365,12 @@ func (e *condenser) canCondense(node ast.Node) bool {
 	for line := range lines {
 		// Each tab is already counted as 1 byte by len(line), so we add (tabWidth-1)
 		// per tab to get the correct visual width without double-counting.
-		length := len(line) + bytes.Count(line, []byte{'\t'})*(tabWidth-1)
+		length := len(line) + bytes.Count(line, []byte{'\t'})*(e.tabWidth-1)
 		if first {
 			length += startCol
 			first = false
 		}
-		if length > maxLen {
+		if length > e.maxLen {
 			return false // If any line exceeds MaxLen, we cannot condense.
 		}
 	}
@@ -392,11 +383,6 @@ func (e *condenser) canCondense(node ast.Node) bool {
 // then computes: indentLevel * tabWidth + byte distance from ancestor to pos.
 // ancestor.Pos() is after leading tabs, so the byte distance is pure non-tab code.
 func (e *condenser) startColumn(pos token.Pos) int {
-	tabWidth := e.config.TabWidth
-	if tabWidth == 0 {
-		tabWidth = DefaultConfig.TabWidth
-	}
-
 	line := e.line(pos)
 	var ancestor token.Pos
 	for i := len(e.parents) - 1; i >= 0; i-- {
@@ -407,7 +393,7 @@ func (e *condenser) startColumn(pos token.Pos) int {
 		ancestor = p.Pos()
 	}
 
-	col := e.indentLevel * tabWidth
+	col := e.indentLevel * e.tabWidth
 	if ancestor.IsValid() {
 		col += int(pos - ancestor)
 	}
