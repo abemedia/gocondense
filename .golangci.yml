@@ -10,6 +10,7 @@ linters:
     - forcetypeassert
     - gochecknoglobals
     - gocyclo
+    - gosec
     - godox
     - mnd
     - nlreturn
