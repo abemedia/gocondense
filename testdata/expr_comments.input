@@ -7,7 +7,7 @@ func main() {
 
 	// SelectorExpr with comment
 	_ = obj. // x
-		Method
+			Method
 
 	// IndexListExpr with comment
 	_ = g[ // x
@@ -15,7 +15,7 @@ func main() {
 
 	// StarExpr with comment
 	_ = * // x
-		pointer
+	pointer
 
 	// UnaryExpr with comment
 	_ = !isValid(

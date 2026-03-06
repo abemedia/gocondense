@@ -17,7 +17,7 @@ func All[
 func TypeParamsAndResults[
 	T any,
 ](
-	a T,    // keep
+	a T, // keep
 	b string,
 ) (
 	string,
@@ -43,7 +43,7 @@ func ParamsAndResults[
 func ResultsOnly[
 	T any, // keep
 ](
-	a T,    // keep
+	a T, // keep
 	b string,
 ) (
 	string,
@@ -69,7 +69,7 @@ func TypeParamsAndParams[
 func TypeParamsOnly[
 	T any,
 ](
-	a T,    // keep
+	a T, // keep
 	b string,
 ) (
 	string,
@@ -95,7 +95,7 @@ func ParamsOnly[
 func NoneCondensable[
 	T any, // keep
 ](
-	a T,    // keep
+	a T, // keep
 	b string,
 ) (
 	string,
