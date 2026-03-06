@@ -1,9 +1,6 @@
 package main
 
 func main() {
-	// CallExpr
-	_ = f(a, b, c)
-
 	// BinaryExpr
 	_ = a + b
 

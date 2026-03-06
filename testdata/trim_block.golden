@@ -60,7 +60,9 @@ func commClause(ch chan int) {
 
 // CompositeLit
 func compositeLit() {
-	_ = map[string]int{"a": 1}
+	_ = map[string]int{
+		"a": 1,
+	}
 }
 
 // FieldList (struct)

@@ -78,10 +78,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	case *ast.CompositeLit:
 		e.condenseCompositeLit(n)
 	case *ast.CallExpr:
-		if e.config.Enable.has(Calls) && !e.isSingleLine(n) && e.isSingleLine(n.Fun) && !e.hasComments(n) &&
-			!slices.ContainsFunc(n.Args, func(arg ast.Expr) bool { return !e.isSingleLine(arg) }) {
-			e.condenseNode(n)
-		}
+		e.condenseCallExpr(n)
 	case *ast.BinaryExpr:
 		if !e.isSingleLine(n) && e.isSingleLine(n.X) && e.isSingleLine(n.Y) && !e.hasComments(n) {
 			e.condenseNode(n)
@@ -106,7 +103,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 // without parentheses. Multi-spec groups, groups without parens, and groups
 // containing comments are returned unchanged.
 func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
-	if !e.config.Enable.has(Declarations) || len(decl.Specs) > 1 || decl.Lparen == token.NoPos || e.hasComments(decl) {
+	if len(decl.Specs) > 1 || decl.Lparen == token.NoPos || e.hasComments(decl) {
 		return decl
 	}
 
@@ -122,11 +119,6 @@ func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
 // Parentheses are preserved only around binary and unary expressions
 // where they may affect precedence or associativity.
 func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr {
-	if !e.config.Enable.has(Parens) {
-		return paren
-	}
-
-	// Only keep parentheses for expressions that might need them for precedence/associativity.
 	switch paren.X.(type) {
 	case *ast.BinaryExpr, *ast.UnaryExpr:
 		return paren
@@ -145,30 +137,20 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 		return
 	}
 
-	var feature Feature
 	switch e.parent(1).(type) {
-	case *ast.FuncType:
-		feature = Funcs
-		if _, ok := e.parent(2).(*ast.FuncLit); ok {
-			feature = Literals
-		}
-	case *ast.TypeSpec:
-		feature = Types
-	case *ast.FuncDecl:
-		// Receiver field list.
-		feature = Funcs
+	case *ast.FuncType, *ast.TypeSpec, *ast.FuncDecl:
 	default:
-		// StructType, InterfaceType — not condensed via this path.
+		// StructType, InterfaceType - not condensed via this path.
 		return
 	}
 
-	if !e.config.Enable.has(feature) || e.hasComments(list) {
+	if e.hasComments(list) {
 		return
 	}
 
 	// All children are already condensed. Check field types are simple and single-line.
 	for _, field := range list.List {
-		if isComplexExpr(field.Type) || !e.isSingleLine(field.Type) {
+		if !e.isSingleLine(field.Type) {
 			return
 		}
 	}
@@ -199,41 +181,28 @@ func (e *condenser) mergeFields(list *ast.FieldList) {
 }
 
 // condenseCompositeLit strips blank lines from composite literals and attempts
-// to collapse multi-line struct, slice, array, or map literals onto a single line.
+// to collapse multi-line slice/array literals onto a single line.
+// For structs and maps with key-value pairs, the first-element rule applies:
+// condense only when the first element shares a line with the opening brace.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 	trimBlock(e, lit.Lbrace, lit.Rbrace, lit.Elts)
-	if len(lit.Elts) == 0 {
+	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
 
-	if e.isSingleLine(lit) || e.hasComments(lit) {
-		return
-	}
-	if slices.ContainsFunc(lit.Elts, isComplexExpr) {
-		return
-	}
-
-	var feature Feature
+	// First-element rule for key-value literals (structs/maps):
+	// only condense when first element shares a line with the opening brace.
+	var hasKeyValue bool
 	switch lit.Type.(type) {
 	case *ast.MapType:
-		feature = Maps
-	case *ast.StructType:
-		feature = Structs
+		hasKeyValue = true
 	default:
-		if slices.ContainsFunc(lit.Elts, func(e ast.Expr) bool {
+		hasKeyValue = slices.ContainsFunc(lit.Elts, func(e ast.Expr) bool {
 			_, ok := e.(*ast.KeyValueExpr)
 			return ok
-		}) {
-			feature = Structs
-		} else {
-			feature = Slices
-		}
+		})
 	}
-
-	if !e.config.Enable.has(feature) {
-		return
-	}
-	if (feature == Structs || feature == Maps) && len(lit.Elts) > e.config.MaxKeyValue {
+	if hasKeyValue && e.line(lit.Lbrace) != e.line(lit.Elts[0].Pos()) {
 		return
 	}
 
@@ -245,6 +214,47 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 	}
 
 	e.condenseNode(lit)
+}
+
+// condenseCallExpr handles condensing of function call expressions.
+// If all args are single-line, condenses the entire call.
+// If only the last arg is multiline, condenses leading args onto the first line
+// and pulls the closing paren up after the trailing arg.
+func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
+	if e.isSingleLine(call) || !e.isSingleLine(call.Fun) {
+		return
+	}
+
+	// Find the first multiline arg: -1 means all single-line,
+	// len-1 means only the last is multiline, anything else we leave alone.
+	i := slices.IndexFunc(call.Args, func(arg ast.Expr) bool { return !e.isSingleLine(arg) })
+	if i == -1 {
+		if !e.hasComments(call) {
+			e.condenseNode(call)
+		}
+		return
+	}
+	if i != len(call.Args)-1 {
+		return
+	}
+
+	// Trailing multiline argument: last arg is multiline, all others are single-line.
+	lastArg := call.Args[i]
+
+	// Only check for comments in the leading args and surrounding parens,
+	// not the last arg which stays multiline.
+	if e.hasCommentsInRange(call.Lparen, lastArg.Pos()-1) || e.hasCommentsInRange(lastArg.End(), call.Rparen) {
+		return
+	}
+
+	saved := slices.Clone(e.tokenFile.Lines())
+
+	e.removeLines(e.line(call.Lparen), e.line(lastArg.Pos()))
+	e.removeLines(e.line(lastArg.End()), e.line(call.Rparen))
+
+	if !e.canCondense(call) {
+		e.tokenFile.SetLines(saved)
+	}
 }
 
 // trimBlock collapses empty block-like nodes and trims leading/trailing
@@ -416,22 +426,6 @@ func (e *condenser) condenseNode(node ast.Node) {
 
 	if !e.canCondense(node) {
 		e.tokenFile.SetLines(lines)
-	}
-}
-
-// isComplexExpr reports whether an expression is too complex to condense onto
-// a single line alongside other elements. Composite/func literals and calls
-// are always complex; interfaces are complex when they have more than one method.
-func isComplexExpr(expr ast.Expr) bool {
-	switch n := expr.(type) {
-	case *ast.CompositeLit, *ast.FuncLit, *ast.CallExpr:
-		return true
-	case *ast.KeyValueExpr:
-		return isComplexExpr(n.Value)
-	case *ast.InterfaceType:
-		return len(n.Methods.List) > 1
-	default:
-		return false
 	}
 }
 

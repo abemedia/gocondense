@@ -1,13 +1,6 @@
 package main
 
 func main() {
-	// CallExpr with comment
-	_ = f(
-		a, // x
-		b,
-		c,
-	)
-
 	// BinaryExpr with comment
 	_ = a + // x
 		b

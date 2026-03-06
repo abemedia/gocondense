@@ -7,11 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 
@@ -20,35 +18,17 @@ import (
 	"github.com/abemedia/gocondense"
 )
 
-var features = map[string]gocondense.Feature{
-	"declarations": gocondense.Declarations,
-	"types":        gocondense.Types,
-	"funcs":        gocondense.Funcs,
-	"literals":     gocondense.Literals,
-	"calls":        gocondense.Calls,
-	"structs":      gocondense.Structs,
-	"slices":       gocondense.Slices,
-	"maps":         gocondense.Maps,
-	"parens":       gocondense.Parens,
-	"all":          gocondense.All,
-}
-
-//nolint:funlen
-func main() {
+func main() { //nolint:funlen
 	var (
-		maxLen      = flag.Int("max-len", 80, "Maximum line length before keeping multi-line")
-		tabWidth    = flag.Int("tab-width", 4, "Width of a tab character for line length calculation")
-		maxKeyValue = flag.Int("max-key-value", 3, "Maximum number of key-value pairs per line for structs and maps")
-		enable      = flag.String("enable", "all", "Comma-separated list of features to enable")
-		disable     = flag.String("disable", "", "Comma-separated list of features to disable")
-		help        = flag.Bool("help", false, "Show help message")
+		maxLen   = flag.Int("max-len", 80, "Maximum line length before keeping multi-line")
+		tabWidth = flag.Int("tab-width", 4, "Width of a tab character for line length calculation")
+		help     = flag.Bool("help", false, "Show help message")
 	)
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] [file|dir|path/...]", os.Args[0]) //nolint:gosec // false positive
 		fmt.Fprintf(os.Stderr, "\nCondenses multi-line Go constructs into single-line constructs where appropriate.\n")
 		fmt.Fprintf(os.Stderr, "If no file is provided, reads from stdin and writes to stdout.\n\n")
-		fmt.Fprintf(os.Stderr, "Available features: %s\n\n", strings.Join(slices.Sorted(maps.Keys(features)), ", "))
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
@@ -60,23 +40,9 @@ func main() {
 		return
 	}
 
-	enabled, err := parseFeatures(*enable)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing --enable flag: %v\n", err)
-		os.Exit(1)
-	}
-
-	disabled, err := parseFeatures(*disable)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing --disable flag: %v\n", err)
-		os.Exit(1)
-	}
-
 	config := &gocondense.Config{
-		MaxLen:      *maxLen,
-		TabWidth:    *tabWidth,
-		MaxKeyValue: *maxKeyValue,
-		Enable:      enabled &^ disabled,
+		MaxLen:   *maxLen,
+		TabWidth: *tabWidth,
 	}
 
 	formatter := gocondense.New(config)
@@ -142,21 +108,6 @@ func main() {
 	}
 
 	wg.Wait()
-}
-
-func parseFeatures(s string) (gocondense.Feature, error) {
-	var f gocondense.Feature
-	if s == "" {
-		return f, nil
-	}
-	for part := range strings.SplitSeq(s, ",") {
-		if feature, ok := features[strings.TrimSpace(part)]; ok {
-			f |= feature
-		} else {
-			return 0, fmt.Errorf("unknown feature: %s", part)
-		}
-	}
-	return f, nil
 }
 
 func processFile(formatter *gocondense.Formatter, filename string) {

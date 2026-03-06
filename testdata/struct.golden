@@ -1,0 +1,71 @@
+package main
+
+type Person struct {
+	Name string
+	Age  int
+}
+
+// Empty literal - no-op.
+func empty() {
+	p := Person{}
+	println(p.Name)
+}
+
+// Comment in elements - leave untouched.
+func commentInElements() {
+	p := Person{Name: "John", // first name
+		Age: 30,
+	}
+	println(p.Name)
+}
+
+// Keyed: first element on own line - leave untouched.
+func keyed() {
+	p := Person{
+		Name: "John",
+		Age:  30,
+	}
+	println(p.Name)
+}
+
+// Keyed: first element on same line - condense.
+func keyedSameLine() {
+	p := Person{Name: "John", Age: 30}
+	println(p.Name)
+}
+
+// Unkeyed: always condense.
+func unkeyed() {
+	p := Person{"John", 30}
+	println(p.Name)
+}
+
+// Anonymous struct: keyed, first element on own line - leave untouched.
+func anonymous() {
+	p := struct {
+		Name string
+		Age  int
+	}{
+		Name: "John",
+		Age:  30,
+	}
+	println(p.Name)
+}
+
+// Anonymous struct: keyed, first element on same line - condense.
+func anonymousSameLine() {
+	p := struct {
+		Name string
+		Age  int
+	}{Name: "John", Age: 30}
+	println(p.Name)
+}
+
+// Anonymous struct: unkeyed - condense.
+func anonymousUnkeyed() {
+	p := struct {
+		Name string
+		Age  int
+	}{"John", 30}
+	println(p.Name)
+}
