@@ -40,12 +40,17 @@ func main() { //nolint:funlen
 		return
 	}
 
-	config := &gocondense.Config{
+	formatter := gocondense.New(&gocondense.Config{
 		MaxLen:   *maxLen,
 		TabWidth: *tabWidth,
-	}
+	})
 
-	formatter := gocondense.New(config)
+	// For directory walks, skip generated files automatically.
+	dirFormatter := gocondense.New(&gocondense.Config{
+		MaxLen:        *maxLen,
+		TabWidth:      *tabWidth,
+		SkipGenerated: true,
+	})
 
 	if flag.NArg() == 0 {
 		// Read from stdin
@@ -79,7 +84,10 @@ func main() { //nolint:funlen
 			continue
 		}
 
-		isDir := info.IsDir()
+		f := formatter
+		if info.IsDir() {
+			f = dirFormatter
+		}
 
 		err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -94,9 +102,9 @@ func main() { //nolint:funlen
 				go func(path string) {
 					defer sem.Release(1)
 					defer wg.Done()
-					processFile(formatter, path)
+					processFile(f, path)
 				}(path)
-			} else if info.IsDir() && !recursive && isDir && path != arg {
+			} else if info.IsDir() && path != arg && (!recursive || filepath.Base(path) == "vendor") {
 				return filepath.SkipDir
 			}
 			return nil

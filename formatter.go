@@ -22,6 +22,10 @@ type Config struct {
 	// when calculating line lengths.
 	// If 0, defaults to 4 spaces.
 	TabWidth int
+
+	// SkipGenerated causes Format to return the source unchanged for
+	// files that contain a "Code generated ... DO NOT EDIT" comment.
+	SkipGenerated bool
 }
 
 // DefaultConfig provides a sensible default configuration with a maximum
@@ -64,7 +68,7 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to parse source: %w", err)
 	}
 
-	if ast.IsGenerated(file) {
+	if f.config.SkipGenerated && ast.IsGenerated(file) {
 		return src, nil
 	}
 
