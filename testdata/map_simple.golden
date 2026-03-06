@@ -1,6 +1,16 @@
 package main
 
-func main() {
-	p := map[string]string{"name": "John", "age": 30}
+// First element on own line - leave untouched.
+func ownLine() {
+	p := map[string]string{
+		"name": "John",
+		"age":  "30",
+	}
+	println(p["name"])
+}
+
+// First element on same line - condense.
+func sameLine() {
+	p := map[string]string{"name": "John", "age": "30"}
 	println(p["name"])
 }

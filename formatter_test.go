@@ -63,17 +63,12 @@ func TestFormatWithConfig(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "disabled_declarations",
+			name: "max_length_constraint",
 			config: &gocondense.Config{
-				MaxLen:   120,
+				MaxLen:   10, // very short
 				TabWidth: 4,
-				Enable:   gocondense.All &^ gocondense.Declarations,
 			},
 			input: `package main
-
-import (
-	"fmt"
-)
 
 func add(
 	a, b int,
@@ -82,91 +77,68 @@ func add(
 }`,
 			want: `package main
 
-import (
-	"fmt"
-)
-
-func add(a, b int) int {
+func add(
+	a, b int,
+) int {
 	return a + b
 }
 `,
 		},
 		{
-			name: "disabled_functions",
+			name: "tab_width_affects_condensing",
 			config: &gocondense.Config{
-				MaxLen:   120,
-				TabWidth: 4,
-				Enable:   gocondense.All &^ gocondense.Funcs,
+				MaxLen:   50,
+				TabWidth: 8,
 			},
+			// With TabWidth 8: indented call = 8 (tab) + 48 (rest) = 56, stays multi-line.
 			input: `package main
 
-import (
-	"fmt"
-)
+import "fmt"
 
-func add(
-	a, b int,
-) int {
-	return a + b
+func greet(first, last string) string {
+	return fmt.Sprintf(
+		"Hello, %s %s!",
+		first,
+		last,
+	)
 }`,
 			want: `package main
 
 import "fmt"
 
-func add(
-	a, b int,
-) int {
-	return a + b
+func greet(first, last string) string {
+	return fmt.Sprintf(
+		"Hello, %s %s!",
+		first,
+		last,
+	)
 }
 `,
 		},
 		{
-			name: "max_length_constraint",
+			name: "tab_width_small_allows_condensing",
 			config: &gocondense.Config{
-				MaxLen:   10, // very short
-				TabWidth: 4,
-				Enable:   gocondense.All,
+				MaxLen:   50,
+				TabWidth: 2,
 			},
+			// Same input but with TabWidth 2: indented call = 2 (tab) + 48 (rest) = 50, condenses.
 			input: `package main
 
-func add(
-	a, b int,
-) int {
-	return a + b
+import "fmt"
+
+func greet(first, last string) string {
+	return fmt.Sprintf(
+		"Hello, %s %s!",
+		first,
+		last,
+	)
 }`,
 			want: `package main
 
-func add(
-	a, b int,
-) int {
-	return a + b
-}
-`,
-		},
-		{
-			name: "maps_disabled",
-			config: &gocondense.Config{
-				MaxLen: 80,
-				Enable: gocondense.All &^ gocondense.Maps,
-			},
-			input: `package main
+import "fmt"
 
-func main() {
-	data := map[string]int{
-		"apple":  1,
-		"banana": 2,
-		"cherry": 3,
-	}
-}
-`,
-			want: `package main
-
-func main() {
-	data := map[string]int{
-		"apple":  1,
-		"banana": 2,
-		"cherry": 3,
-	}
+func greet(first, last string) string {
+	return fmt.Sprintf("Hello, %s %s!", first, last)
 }
 `,
 		},

@@ -11,135 +11,6 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// Feature represents formatting capabilities that can be enabled or disabled.
-// Multiple features can be combined using bitwise OR operations.
-type Feature uint
-
-// has reports whether a specific feature is enabled.
-func (f Feature) has(flag Feature) bool { return f&flag != 0 }
-
-const (
-	// Declarations enables condensing of single-item declaration groups into simple declarations.
-	// This converts declaration groups like:
-	//   import (
-	//       "fmt"
-	//   )
-	//
-	//   var (
-	//       x = 1
-	//   )
-	//
-	//   const (
-	//       Name = "value"
-	//   )
-	//
-	//   type (
-	//       ID int
-	//   )
-	// into:
-	//   import "fmt"
-	//
-	//   var x = 1
-	//
-	//   const Name = "value"
-	//
-	//   type ID int
-	Declarations Feature = 1 << iota
-
-	// Types enables condensing of multi-line type declarations, including generic type parameters.
-	// This converts type parameter lists like:
-	//   func MyFunc[
-	//       T any,
-	//       U comparable,
-	//   ]() {}
-	// into:
-	//   func MyFunc[T any, U comparable]() {}
-	Types
-
-	// Funcs enables condensing of multi-line function declarations, including parameters and return values.
-	// This converts function signatures like:
-	//   func Add(
-	//       a int,
-	//       b int,
-	//   ) (
-	//       result int,
-	//   ) {
-	//       return a + b
-	//   }
-	// into:
-	//   func Add(a int, b int) (result int) {
-	//       return a + b
-	//   }
-	Funcs
-
-	// Literals enables condensing of multi-line function literals (anonymous functions).
-	// This converts function literals like:
-	//   add := func(
-	//       x int,
-	//       y int,
-	//   ) int {
-	//       return x + y
-	//   }
-	// into:
-	//   add := func(x int, y int) int {
-	//       return x + y
-	//   }
-	Literals
-
-	// Calls enables condensing of multi-line function call expressions.
-	// This converts function calls like:
-	//   myFunction(
-	//       arg1,
-	//       arg2,
-	//       arg3,
-	//   )
-	// into:
-	//   myFunction(arg1, arg2, arg3)
-	Calls
-
-	// Structs enables condensing of multi-line struct literals with named fields.
-	// This converts struct literals like:
-	//   Person{
-	//       Name: "John",
-	//       Age:  30,
-	//   }
-	// into:
-	//   Person{Name: "John", Age: 30}
-	Structs
-
-	// Slices enables condensing of multi-line slice and array literals.
-	// This converts slice literals like:
-	//   []string{
-	//       "apple",
-	//       "banana",
-	//       "cherry",
-	//   }
-	// into:
-	//   []string{"apple", "banana", "cherry"}
-	Slices
-
-	// Maps enables condensing of multi-line map literals.
-	// This converts map literals like:
-	//   map[string]int{
-	//       "apple":  1,
-	//       "banana": 2,
-	//       "cherry": 3,
-	//   }
-	// into:
-	//   map[string]int{"apple": 1, "banana": 2, "cherry": 3}
-	Maps
-
-	// Parens enables removal of unnecessary parentheses around expressions.
-	// This converts expressions like:
-	//   x := (a) && (b && c)
-	// into:
-	//   x := a && (b && c)
-	Parens
-
-	// All enables condensing of all supported constructs.
-	All = Declarations | Types | Funcs | Literals | Calls | Structs | Slices | Maps | Parens
-)
-
 // Config controls the behavior of the Go code formatter.
 type Config struct {
 	// MaxLen is the maximum line length before keeping constructs multi-line.
@@ -151,27 +22,13 @@ type Config struct {
 	// when calculating line lengths.
 	// If 0, defaults to 4 spaces.
 	TabWidth int
-
-	// MaxKeyValue is the maximum number of key-value pairs allowed in
-	// struct and map literals before keeping them multi-line.
-	// If 0, defaults to 3 pairs.
-	MaxKeyValue int
-
-	// Enable specifies which formatting features are active.
-	// Use combinations like (Declarations | Funcs) to enable specific features,
-	// or All to enable everything.
-	// If 0, all features are enabled by default.
-	Enable Feature
 }
 
-// DefaultConfig provides a sensible default configuration.
-// It enables all features with a maximum line length of 80 characters,
-// tab width of 4 spaces, and up to 3 key-value pairs per line.
+// DefaultConfig provides a sensible default configuration with a maximum
+// line length of 80 characters and a tab width of 4 spaces.
 var DefaultConfig = &Config{
-	MaxLen:      80,
-	TabWidth:    4,
-	MaxKeyValue: 3,
-	Enable:      All,
+	MaxLen:   80,
+	TabWidth: 4,
 }
 
 // Format formats Go source code using the default configuration.
@@ -196,8 +53,8 @@ func New(config *Config) *Formatter {
 }
 
 // Format processes Go source code and returns a condensed version.
-// The formatter respects the configured limits and feature flags,
-// only condensing constructs that fit within the specified constraints.
+// The formatter respects the configured limits, only condensing constructs
+// that fit within the specified constraints.
 // Returns the formatted source code or an error if parsing or formatting fails.
 func (f *Formatter) Format(src []byte) ([]byte, error) {
 	fset := token.NewFileSet()

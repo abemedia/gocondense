@@ -1,0 +1,100 @@
+package main
+
+// Simple call - condense.
+func simple() {
+	_ = f(
+		a,
+		b,
+		c,
+	)
+}
+
+// Already single-line - no-op.
+func singleLine() {
+	_ = f(a, b, c)
+}
+
+// Single multiline arg - pull parens tight.
+func singleMultilineArg() {
+	_ = f(
+		func() {
+			println("ok")
+		},
+	)
+}
+
+// Trailing multiline arg - condense leading args.
+func trailingMultilineArg() {
+	_ = f(
+		a,
+		b,
+		func() {
+			println("ok")
+		},
+	)
+}
+
+// Comment in args - leave untouched.
+func commentInArgs() {
+	_ = f(
+		a, // x
+		b,
+		c,
+	)
+}
+
+// Comment only in trailing multiline arg - leading args condense.
+func commentInTrailingArg() {
+	_ = f(
+		a,
+		b,
+		func() { // comment inside
+			println("ok")
+		},
+	)
+}
+
+// Comment in leading arg blocks trailing-arg condensing.
+func commentInLeadingArg() {
+	_ = f(
+		a, // x
+		b,
+		func() {
+			println("ok")
+		},
+	)
+}
+
+// Comment after trailing arg blocks condensing.
+func commentAfterTrailingArg() {
+	_ = f(
+		a,
+		b,
+		func() {
+			println("ok")
+		}, // x
+	)
+}
+
+// Trailing multiline arg - leading args too long to condense onto one line.
+func trailingMultilineArgExceedsMaxLen() {
+	_ = processWithCallback(
+		longVariableName,
+		anotherLongVariableName,
+		yetAnotherLongVariable,
+		func() {
+			println("ok")
+		},
+	)
+}
+
+// Middle arg is multiline - leave untouched.
+func middleMultilineArg() {
+	_ = f(
+		a,
+		func() {
+			println("ok")
+		},
+		b,
+	)
+}
