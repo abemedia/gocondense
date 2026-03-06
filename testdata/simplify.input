@@ -1,0 +1,100 @@
+package main
+
+// The following empty declaration groups are removed.
+
+const ()
+
+var ()
+
+type ()
+
+// Empty declaration group with comment - kept.
+const ( // keep
+)
+
+type T struct {
+	X int
+	Y int
+}
+
+// Slice composite literal: inner type elided.
+func sliceLiteral() {
+	_ = []T{T{1, 2}, T{3, 4}}
+}
+
+// Array composite literal: inner type elided.
+func arrayLiteral() {
+	_ = [2]T{T{1, 2}, T{3, 4}}
+}
+
+// Map composite literal: value type elided.
+func mapValueLiteral() {
+	_ = map[string]T{"a": T{1, 2}, "b": T{3, 4}}
+}
+
+// Map composite literal: key type elided.
+func mapKeyLiteral() {
+	_ = map[T]string{T{1, 2}: "a", T{3, 4}: "b"}
+}
+
+// Nested: both key and value types elided.
+func mapKeyValueLiteral() {
+	_ = map[T]T{T{1, 2}: T{3, 4}}
+}
+
+// Pointer element type: &T elided.
+func pointerSliceLiteral() {
+	_ = []*T{&T{1, 2}, &T{3, 4}}
+}
+
+// Nested slice of slices: inner type elided.
+func nestedSliceLiteral() {
+	_ = [][]int{[]int{1, 2}, []int{3, 4}}
+}
+
+// Slice expression: s[a:len(s)] simplified to s[a:].
+func sliceExprSimplify() {
+	s := []int{1, 2, 3}
+	_ = s[1:len(s)]
+}
+
+// Slice expression: 3-index slice left alone.
+func sliceExpr3Index() {
+	s := []int{1, 2, 3}
+	_ = s[1:len(s):cap(s)]
+}
+
+// Slice expression: non-ident receiver left alone.
+func sliceExprNonIdent() {
+	_ = getSlice()[0:len(getSlice())]
+}
+
+// Range: for x, _ = range simplified to for x = range.
+func rangeDropBlankValue() {
+	for i, _ := range []int{1, 2, 3} {
+		_ = i
+	}
+}
+
+// Range: for _, _ = range simplified to for range.
+func rangeDropBothBlanks() {
+	for _, _ = range []int{1, 2, 3} {
+	}
+}
+
+// Range: for _ = range simplified to for range.
+func rangeDropBlankKey() {
+	for _ = range []int{1, 2, 3} {
+	}
+}
+
+// No simplification: different inner type.
+func noSimplifyDifferentType() {
+	type U struct{ X int }
+	_ = []T{U{1}}
+}
+
+// No simplification: non-composite element.
+func noSimplifyNonComposite() {
+	_ = []int{1, 2, 3}
+}

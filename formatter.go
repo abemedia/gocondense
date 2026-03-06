@@ -82,6 +82,7 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 		parents:   make([]ast.Node, 0, 32),
 	}
 
+	simplify(file)
 	astutil.Apply(file, c.applyPre, c.applyPost)
 
 	c.buf.Reset()
