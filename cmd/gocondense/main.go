@@ -7,18 +7,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sync/semaphore"
 
 	"github.com/abemedia/gocondense"
 )
 
-func main() { //nolint:funlen
+func main() { //nolint:funlen,gocognit
 	var (
 		maxLen   = flag.Int("max-len", 80, "Maximum line length before keeping multi-line")
 		tabWidth = flag.Int("tab-width", 4, "Width of a tab character for line length calculation")
@@ -57,18 +59,24 @@ func main() { //nolint:funlen
 		input, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading from stdin: %v\n", err)
-			os.Exit(1)
+			os.Exit(2)
 		}
 		output, err := formatter.Format(input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error formatting code: %v\n", err)
-			os.Exit(1)
+			os.Exit(2)
 		}
-		os.Stdout.Write(output)
+		if _, err := os.Stdout.Write(output); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing to stdout: %v\n", err)
+			os.Exit(2)
+		}
 		return
 	}
 
-	var wg sync.WaitGroup
+	var (
+		wg        sync.WaitGroup
+		hasErrors atomic.Bool
+	)
 	sem := semaphore.NewWeighted(int64(runtime.NumCPU()))
 
 	for _, path := range flag.Args() {
@@ -81,6 +89,7 @@ func main() { //nolint:funlen
 		info, err := os.Stat(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error stating path %s: %v\n", path, err)
+			hasErrors.Store(true)
 			continue
 		}
 
@@ -89,50 +98,56 @@ func main() { //nolint:funlen
 			f = dirFormatter
 		}
 
-		err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		err = filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !info.IsDir() && strings.HasSuffix(path, ".go") {
-				if err := sem.Acquire(context.Background(), 1); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to acquire semaphore: %v\n", err)
-					return err
-				}
+			if !d.IsDir() && strings.HasSuffix(path, ".go") {
+				_ = sem.Acquire(context.Background(), 1)
 				wg.Add(1)
 				go func(path string) {
 					defer sem.Release(1)
 					defer wg.Done()
-					processFile(f, path)
+					if !processFile(f, path) {
+						hasErrors.Store(true)
+					}
 				}(path)
-			} else if info.IsDir() && path != arg && (!recursive || filepath.Base(path) == "vendor") {
+			} else if d.IsDir() && path != arg && (!recursive || filepath.Base(path) == "vendor") {
 				return filepath.SkipDir
 			}
 			return nil
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error walking path %s: %v\n", path, err)
-			os.Exit(1)
+			hasErrors.Store(true)
 		}
 	}
 
 	wg.Wait()
+
+	if hasErrors.Load() {
+		os.Exit(2)
+	}
 }
 
-func processFile(formatter *gocondense.Formatter, filename string) {
+func processFile(formatter *gocondense.Formatter, filename string) bool {
 	input, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading file %s: %v\n", filename, err)
-		return
+		return false
 	}
 
 	output, err := formatter.Format(input)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error formatting file %s: %v\n", filename, err)
-		return
+		return false
 	}
 
 	err = os.WriteFile(filename, output, 0o600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing file %s: %v\n", filename, err)
+		return false
 	}
+
+	return true
 }
