@@ -103,3 +103,15 @@ func NoneCondensable[
 ) {
 	return "", nil
 }
+
+// Multiline param type that exceeds max length - leave params uncondensed.
+func withMultilineParamType(
+	a int,
+	cb func(
+		longParamName int,
+		anotherLongParamName int,
+		yetAnotherLongParamName int,
+	),
+) {
+	cb(a, a, a)
+}
