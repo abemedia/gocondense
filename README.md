@@ -8,9 +8,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/abemedia/gocondense)](https://goreportcard.com/report/github.com/abemedia/gocondense)
 
 A Go source code formatter that condenses multi-line constructs onto single
-lines where they fit, reducing vertical noise while preserving readability. All
-transformations are line-length aware (default 80 columns), idempotent, and
-preserve all comments. Generated files are skipped automatically.
+lines where they fit, reducing vertical noise while preserving readability.  
+All transformations are line-length aware (default 80 columns), idempotent, and
+preserve all comments.
 
 ## Installation
 
@@ -29,7 +29,8 @@ cat file.go | gocondense          # read from stdin, write to stdout
 
 When no arguments are provided, the formatter reads from standard input and
 writes the result to standard output. When file or directory arguments are
-provided, source files are modified in-place.
+provided, source files are modified in-place. Generated files and vendor
+directories are skipped during directory walks.
 
 | Flag          | Description                                                             | Default |
 | ------------- | ----------------------------------------------------------------------- | ------- |
