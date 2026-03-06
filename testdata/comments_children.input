@@ -28,7 +28,7 @@ func main() {
 		func() {
 
 			doSomething()
-			
+
 		}, // comment
 		bar(
 			1,
