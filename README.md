@@ -7,101 +7,43 @@
 [![CI](https://github.com/abemedia/gocondense/actions/workflows/test.yml/badge.svg)](https://github.com/abemedia/gocondense/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/abemedia/gocondense)](https://goreportcard.com/report/github.com/abemedia/gocondense)
 
-A configurable Go code formatter that condenses multi-line constructs into single lines where appropriate, improving code density while maintaining readability and respecting specified formatting constraints.
-
-## Features
-
-- **Configurable**: Fine-grained control over which constructs to condense
-- **Flexible Limits**: Set maximum line length and key-value pair limits
-- **Preserves Comments**: All comments are preserved in their original positions
-- **Semantic Safety**: No changes to code semantics or behavior
-- **CLI and Library**: Available as both a command-line tool and Go library
+A Go source code formatter that condenses multi-line constructs onto single
+lines where they fit, reducing vertical noise while preserving readability. All
+transformations are line-length aware (default 80 columns), idempotent, and
+preserve all comments. Generated files are skipped automatically.
 
 ## Installation
-
-### Command Line Tool
 
 ```bash
 go install github.com/abemedia/gocondense/cmd/gocondense@latest
 ```
 
-### Library
+## Usage
 
 ```bash
-go get github.com/abemedia/gocondense
+gocondense file1.go file2.go      # format files in-place
+gocondense ./                     # format all .go files in a directory
+gocondense ./...                  # format all .go files recursively
+cat file.go | gocondense          # read from stdin, write to stdout
 ```
 
-## Supported Constructs
+When no arguments are provided, the formatter reads from standard input and
+writes the result to standard output. When file or directory arguments are
+provided, source files are modified in-place.
 
-### Declaration Groups
+| Flag          | Description                                                             | Default |
+| ------------- | ----------------------------------------------------------------------- | ------- |
+| `--max-len`   | Maximum line length; constructs exceeding this remain on multiple lines | 80      |
+| `--tab-width` | Tab character width used for line length calculation                    | 4       |
 
-Condenses single-item declaration groups (import, var, const, type) from multi-line to single-line format.
+## Transformations
 
-**Before:**
+<details><summary><b>Condense function signatures</b></summary>
 
-```go
-import (
-    "fmt"
-)
-
-var (
-    x = 1
-)
-
-const (
-    Name = "value"
-)
-
-type (
-    ID int
-)
-```
-
-**After:**
-
-```go
-import "fmt"
-
-var x = 1
-
-const Name = "value"
-
-type ID int
-```
-
----
-
-### Unnecessary Parentheses
-
-Removes unnecessary parentheses around simple expressions while preserving those needed for operator precedence.
-
-**Before:**
-
-```go
-x := (variable)      // Around identifiers
-y := (42)            // Around literals
-z := (string)("foo") // Type conversions
-nested := ((a))      // Nested parentheses
-unary := -(value)    // Simple unary operands
-```
-
-**After:**
-
-```go
-x := variable      // Around identifiers
-y := 42            // Around literals
-z := string("foo") // Type conversions
-nested := a        // Nested parentheses
-unary := -value    // Simple unary operands
-```
-
----
-
-### Function Declarations
-
-Condenses function parameters and return values.
-
-**Before:**
+Multi-line parameter lists, return types, and type parameter lists are condensed
+onto single lines. Each part is condensed independently — for example,
+parameters with comments remain multi-line while return types are still
+condensed.
 
 ```go
 func Add[
@@ -117,95 +59,45 @@ func Add[
 }
 ```
 
-**After:**
-
 ```go
 func Add[T ~int](a, b T) (result T, err error) {
     return a + b, nil
 }
 ```
 
-**Supports:**
-
-- Regular function parameters
-- Named return values
-- Generic type parameters
-- Variadic functions
-
----
-
-### Function Literals (Anonymous Functions)
-
-Condenses function literal signatures.
-
-**Before:**
+Partial condensing when parameters contain comments:
 
 ```go
-callback := func(
-    x int,
-    y int,
-) int {
-    return x + y
+func Partial[
+    T any,
+](
+    a T, // keep
+    b string,
+) (
+    string,
+    error,
+) {
+    return "", nil
 }
 ```
 
-**After:**
-
 ```go
-callback := func(x, y int) int {
-    return x + y
+func Partial[T any](
+    a T, // keep
+    b string,
+) (string, error) {
+    return "", nil
 }
 ```
 
----
+</details>
 
-### Block Statements
+<details><summary><b>Condense function calls</b></summary>
 
-Removes blank lines at the beginning and end of block statements. Blank lines adjacent to comments are preserved.
-
-**Before:**
-
-```go
-func add(a, b int) int {
-
-    return a + b
-
-}
-
-callback := func(x int) {
-
-    // validate
-    if x < 0 {
-
-        return
-
-    }
-
-}
-```
-
-**After:**
-
-```go
-func add(a, b int) int {
-    return a + b
-}
-
-callback := func(x int) {
-    // validate
-    if x < 0 {
-        return
-    }
-}
-```
-
----
-
-### Function Calls
-
-Condenses function call arguments.
-
-**Before:**
+Multi-line argument lists are condensed onto a single line. When the last
+argument is multiline, leading arguments are condensed onto the first line and
+the closing parenthesis is pulled up. Calls are left untouched if any argument
+other than the last is multiline.
 
 ```go
 result := myFunction(
@@ -213,293 +105,356 @@ result := myFunction(
     arg2,
     arg3,
 )
-
-fmt.Printf(
-    "Hello %s, you are %d years old",
-    name,
-    age,
-)
 ```
-
-**After:**
 
 ```go
 result := myFunction(arg1, arg2, arg3)
-
-fmt.Printf("Hello %s, you are %d years old", name, age)
 ```
 
-**Supports:**
-
-- Regular function calls
-- Method calls
-- Variadic arguments (with `...`)
-
----
-
-### Struct Literals
-
-Condenses struct initialization with named fields.
-
-**Before:**
+Trailing multiline argument:
 
 ```go
-person := Person{
-    Name: "John",
-    Age:  30,
-    City: "New York",
-}
+processData(
+    people,
+    func(p Person) bool {
+        return p.Age >= 18
+    },
+)
 ```
-
-**After:**
 
 ```go
-person := Person{Name: "John", Age: 30, City: "New York"}
+processData(people, func(p Person) bool {
+    return p.Age >= 18
+})
 ```
 
----
+</details>
 
-### Slice and Array Literals
+<details><summary><b>Condense slice, array, and unkeyed struct literals</b></summary>
 
-Condenses slice and array definitions.
-
-**Before:**
+Slice, array, and unkeyed struct literals are condensed onto a single line,
+provided all elements are single-line.
 
 ```go
 numbers := []int{
     1,
     2,
     3,
-    4,
-}
-
-fruits := []string{
-    "apple",
-    "banana",
-    "cherry",
 }
 ```
 
-**After:**
-
 ```go
-numbers := []int{1, 2, 3, 4}
-
-fruits := []string{"apple", "banana", "cherry"}
+numbers := []int{1, 2, 3}
 ```
 
----
+</details>
 
-### Map Literals
+<details><summary><b>Condense keyed struct and map literals</b></summary>
 
-Condenses map initialization.
+Keyed literals are only condensed when the first element already shares a line
+with the opening brace.
 
-**Before:**
+Condensed (first element on brace line):
 
 ```go
-config := map[string]int{
-    "apple":  1,
-    "banana": 2,
-    "cherry": 3,
+p := Person{Name: "John",
+    Age: 30,
 }
 ```
 
-**After:**
-
 ```go
-config := map[string]int{"apple": 1, "banana": 2, "cherry": 3}
+p := Person{Name: "John", Age: 30}
 ```
 
----
-
-### Generic Type Parameters
-
-Condenses generic type parameter lists and instantiations.
-
-**Before:**
+Left untouched (first element on its own line):
 
 ```go
-func GenericFunc[
-    T any,
-    U comparable,
-](
-    a T,
-    b U,
-) T {
-    return a
+p := Person{
+    Name: "John",
+    Age:  30,
 }
-
-// Type instantiation
-var result = GenericFunc[
-    string,
-    int,
-]("hello", 42)
 ```
 
-**After:**
+</details>
+
+<details><summary><b>Condense expressions</b></summary>
+
+Binary expressions, selector chains, and generic type instantiations that span
+multiple lines are condensed onto a single line, provided both sides of the
+expression are single-line.
 
 ```go
-func GenericFunc[T any, U comparable](a T, b U) T {
-    return a
-}
+_ = a +
+    b
 
-// Type instantiation
-var result = GenericFunc[string, int]("hello", 42)
+_ = obj.
+    Method
+
+_ = g[
+    int, string](1, "a")
 ```
-
-## Command Line Tool
-
-### Basic Usage
-
-Format a single file (modifies in-place):
-
-```bash
-gocondense myfile.go
-```
-
-Format multiple files:
-
-```bash
-gocondense file1.go file2.go file3.go
-```
-
-Format all Go files in a directory:
-
-```bash
-gocondense ./
-```
-
-Format all Go files recursively:
-
-```bash
-gocondense ./...
-```
-
-Format from stdin to stdout:
-
-```bash
-cat myfile.go | gocondense
-```
-
-### Configuration Options
-
-| Flag              | Description                                           | Default |
-| ----------------- | ----------------------------------------------------- | ------- |
-| `--max-len`       | Maximum line length before keeping multi-line         | 80      |
-| `--tab-width`     | Width of tab character for length calculation         | 4       |
-| `--max-key-value` | Maximum key-value pairs per line for structs and maps | 3       |
-| `--enable`        | Comma-separated list of features to enable            | "all"   |
-| `--disable`       | Comma-separated list of features to disable           | ""      |
-
-#### Supported Features
-
-- `declarations` - Single-item declaration groups
-- `parentheses` - Unnecessary parentheses removal
-- `types` - Generic type parameters
-- `funcs` - Function declarations
-- `literals` - Function literals
-- `calls` - Function calls
-- `structs` - Struct literals
-- `slices` - Slice/array literals
-- `maps` - Map literals
-- `all` - All features
-
-### Examples
-
-**Only condense specific features:**
-
-```bash
-gocondense --enable calls,structs myfile.go
-```
-
-**Exclude certain features:**
-
-```bash
-gocondense --disable declarations myfile.go
-```
-
-**Custom limits:**
-
-```bash
-gocondense --max-len 120 --tab-width 2 --max-key-value 5 myfile.go
-```
-
-## Go Library
-
-### Getting Started
 
 ```go
-package main
+_ = a + b
 
+_ = obj.Method
+
+_ = g[int, string](1, "a")
+```
+
+</details>
+
+<details><summary><b>Unwrap single-item declaration groups</b></summary>
+
+Declaration groups (`import`, `const`, `var`, `type`) containing a single item
+are unwrapped onto a single line without parentheses. Groups with comments
+inside are left untouched.
+
+```go
 import (
     "fmt"
-    "log"
-
-    "github.com/abemedia/gocondense"
 )
 
-func main() {
-    sourceCode := []byte(`
-func add(
-    a int,
-    b int,
-) int {
-    return a + b
-}`)
-
-    // Using default configuration
-    formatted, err := gocondense.Format(sourceCode)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    fmt.Println(string(formatted))
-    // Output: func add(a int, b int) int { return a + b }
-}
-```
-
-### Custom Configuration
-
-```go
-package main
-
-import (
-    "fmt"
-    "log"
-
-    "github.com/abemedia/gocondense"
+const (
+    x = 1
 )
 
-func main() {
-    config := &gocondense.Config{
-        MaxLen:      120,            // Allow longer lines
-        MaxKeyValue: 5,              // Allow up to 5 key-value pairs per line
-        TabWidth:    4,              // Tab width for length calculation
-        Enable:      gocondense.All, // Enable all features
-    }
+var (
+    y = 2
+)
 
-    formatter := gocondense.New(config)
-    formatted, err := formatter.Format(sourceCode)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    fmt.Println(string(formatted))
-}
+type (
+    S struct{}
+)
 ```
-
-### Feature Selection
 
 ```go
-// Enable only specific features
-config := &gocondense.Config{
-    MaxLen: 80,
-    Enable: gocondense.Funcs | gocondense.Calls, // Only functions and calls
+import "fmt"
+
+const x = 1
+
+var y = 2
+
+type S struct{}
+```
+
+</details>
+
+<details><summary><b>Group adjacent parameters with the same type</b></summary>
+
+Adjacent type parameters or function parameters and results with the same type
+are merged into a single declaration.
+
+```go
+func foo(a int, b int) (c int, d int) { return a, b }
+
+type Pair[A any, B any] struct{}
+```
+
+```go
+func foo(a, b int) (c, d int) { return a, b }
+
+type Pair[A, B any] struct{}
+```
+
+</details>
+
+<details><summary><b>Remove unnecessary parentheses</b></summary>
+
+Redundant parentheses around variables, literals, type conversions, and unary
+expressions are removed. Parentheses required for precedence are preserved.
+
+```go
+x := (variable)
+y := (42)
+z := (string)("foo")
+unary := -(value)
+result := (a + b) * c // kept
+```
+
+```go
+x := variable
+y := 42
+z := string("foo")
+unary := -value
+result := (a + b) * c // kept
+```
+
+</details>
+
+<details><summary><b>Trim leading and trailing empty lines inside blocks</b></summary>
+
+Leading and trailing empty lines are removed from function bodies, case clauses,
+slice/map/struct literals, and struct/interface definitions.
+
+```go
+func foo() {
+
+    bar()
+
 }
 
-// Enable all except declarations
-config := &gocondense.Config{
-    MaxLen: 80,
-    Enable: gocondense.All &^ gocondense.Declarations, // All except declarations
+switch {
+case true:
+
+    x := 1
+
+}
+
+_ = map[string]int{
+
+    "a": 1,
+
+}
+
+type S struct {
+
+    A int
+
+}
+
+type I interface {
+
+    Foo()
+
 }
 ```
+
+```go
+func foo() {
+    bar()
+}
+
+switch {
+case true:
+    x := 1
+}
+
+_ = map[string]int{
+    "a": 1,
+}
+
+type S struct {
+    A int
+}
+
+type I interface {
+    Foo()
+}
+```
+
+</details>
+
+<details><summary><b>Collapse empty blocks</b></summary>
+
+Empty function bodies, struct definitions, and interface definitions are
+collapsed onto a single line.
+
+```go
+func noop() {
+}
+
+type S struct {
+}
+
+type I interface {
+}
+```
+
+```go
+func noop() {}
+
+type S struct{}
+
+type I interface{}
+```
+
+</details>
+
+## Editor Integration
+
+### VS Code
+
+Add the following to your
+[settings](https://code.visualstudio.com/docs/getstarted/settings):
+
+```json
+{
+  "go.formatTool": "custom",
+  "go.alternateTools": {
+    "customFormatter": "gocondense"
+  }
+}
+```
+
+### GoLand
+
+1. Open **Settings** > **Tools** > **File Watchers** and add a **Custom**
+   template.
+2. Configure as follows:
+
+| Field                 | Value              |
+| --------------------- | ------------------ |
+| **Program**           | `gocondense`       |
+| **Arguments**         | `$FilePath$`       |
+| **Output path**       | `$FilePath$`       |
+| **Working directory** | `$ProjectFileDir$` |
+
+Disable all checkboxes in the **Advanced** section.
+
+### Vim
+
+With [vim-go](https://github.com/fatih/vim-go):
+
+```vim
+let g:go_fmt_command = "gocondense"
+```
+
+Without vim-go, format on save can be configured with an autocommand:
+
+```vim
+autocmd BufWritePre *.go silent execute '%!gocondense'
+```
+
+### Neovim
+
+With [conform.nvim](https://github.com/stevearc/conform.nvim):
+
+```lua
+require("conform").setup({
+  formatters_by_ft = {
+    go = { "gocondense" },
+  },
+  formatters = {
+    gocondense = {
+      command = "gocondense",
+      stdin = true,
+    },
+  },
+})
+```
+
+## Using as a Library
+
+```bash
+go get github.com/abemedia/gocondense@latest
+```
+
+Format a source file with default settings (80 columns, 4-wide tabs):
+
+```go
+formatted, err := gocondense.Format(src)
+```
+
+Use a custom configuration:
+
+```go
+f := gocondense.New(&gocondense.Config{
+    MaxLen:   120,
+    TabWidth: 4,
+})
+formatted, err := f.Format(src)
+```
+
+See the [Go Reference](https://pkg.go.dev/github.com/abemedia/gocondense) for
+full API documentation.
