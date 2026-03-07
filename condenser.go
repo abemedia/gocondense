@@ -134,10 +134,6 @@ func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr {
 // condenseFieldList attempts to collapse a multi-line field list (params,
 // results, type params, or receivers) onto a single line.
 func (e *condenser) condenseFieldList(list *ast.FieldList) {
-	if list == nil || e.isSingleLine(list) {
-		return
-	}
-
 	switch e.parent(1).(type) {
 	case *ast.FuncType, *ast.TypeSpec, *ast.FuncDecl:
 	default:
@@ -145,7 +141,8 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 		return
 	}
 
-	if e.hasComments(list) {
+	startLine, endLine := e.line(list.Pos()), e.line(list.End())
+	if startLine == endLine || e.hasComments(list) {
 		return
 	}
 
@@ -158,7 +155,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 
 	// Condense: remove lines to make the FieldList single-line.
 	saved := slices.Clone(e.tokenFile.Lines())
-	e.removeLines(e.line(list.Pos()), e.line(list.End()))
+	e.removeLines(startLine, endLine)
 
 	// format.Node can't render a standalone FieldList, so verify against
 	// the parent node which IS renderable.
@@ -310,9 +307,6 @@ func (e *condenser) hasCommentsInRange(start, end token.Pos) bool {
 
 // hasComments checks if there are any comments within the node's position range.
 func (e *condenser) hasComments(node ast.Node) bool {
-	if node == nil {
-		return false
-	}
 	return e.hasCommentsInRange(node.Pos(), node.End())
 }
 
@@ -397,10 +391,6 @@ func (e *condenser) startColumn(pos token.Pos) int {
 // condenseNode attempts to condense a node by removing lines between its positions.
 // If the condensed result would exceed MaxLen, the line table is restored.
 func (e *condenser) condenseNode(node ast.Node) {
-	if e.isSingleLine(node) {
-		return
-	}
-
 	lines := slices.Clone(e.tokenFile.Lines())
 	e.removeLines(e.line(node.Pos()), e.line(node.End()))
 
