@@ -46,19 +46,33 @@ func unkeyed() {
 }
 
 // Anonymous struct: keyed, first element on own line - leave untouched.
-func anonymous() {
-	p := struct {
-		Name string
-		Age  int
-	}{
-		Name: "John",
-		Age:  30,
+func anonymousKeyed() {
+	p := struct{ A, B string }{
+		A: "x",
+		B: "y",
 	}
-	println(p.Name)
+	println(p.A)
 }
 
 // Anonymous struct: keyed, first element on same line - condense.
-func anonymousSameLine() {
+func anonymousKeyedSameLine() {
+	p := struct{ A, B string }{A: "x",
+		B: "y",
+	}
+	println(p.A)
+}
+
+// Anonymous struct: unkeyed - condense.
+func anonymousUnkeyed() {
+	p := struct{ A, B string }{
+		"x",
+		"y",
+	}
+	println(p.A)
+}
+
+// Anonymous struct: multi-line type, first element on same line - leave untouched.
+func anonymousMultiLineTypeSameLine() {
 	p := struct {
 		Name string
 		Age  int
@@ -68,8 +82,8 @@ func anonymousSameLine() {
 	println(p.Name)
 }
 
-// Anonymous struct: unkeyed - condense.
-func anonymousUnkeyed() {
+// Anonymous struct: multi-line type - leave untouched.
+func anonymousMultiLineType() {
 	p := struct {
 		Name string
 		Age  int
