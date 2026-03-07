@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -20,75 +21,92 @@ import (
 	"github.com/abemedia/gocondense"
 )
 
-func main() { //nolint:funlen,gocognit
-	var (
-		maxLen   = flag.Int("max-len", 80, "Maximum line length before keeping multi-line")
-		tabWidth = flag.Int("tab-width", 4, "Width of a tab character for line length calculation")
-		help     = flag.Bool("help", false, "Show help message")
-	)
+func main() {
+	os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr))
+}
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] [file|dir|path/...]", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nCondenses multi-line Go constructs into single-line constructs where appropriate.\n")
-		fmt.Fprintf(os.Stderr, "If no file is provided, reads from stdin and writes to stdout.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		flag.PrintDefaults()
+// run parses flags and dispatches to stdin formatting or file processing.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+
+	maxLen := flags.Int("max-len", 80, "Maximum line length before keeping multi-line")
+	tabWidth := flags.Int("tab-width", 4, "Width of a tab character for line length calculation")
+	help := flags.Bool("help", false, "Show help message")
+
+	flags.Usage = func() {
+		fmt.Fprintf(stderr, "Usage: %s [options] [file|dir|path/...]", args[0])
+		fmt.Fprintf(stderr, "\nCondenses multi-line Go constructs into single-line constructs where appropriate.\n")
+		fmt.Fprintf(stderr, "If no file is provided, reads from stdin and writes to stdout.\n\n")
+		fmt.Fprintf(stderr, "Options:\n")
+		flags.PrintDefaults()
 	}
 
-	flag.Parse()
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
 
 	if *help {
-		flag.Usage()
-		return
+		flags.Usage()
+		return 0
 	}
 
-	formatter := gocondense.New(&gocondense.Config{
+	if *maxLen < 0 || *tabWidth < 0 {
+		fmt.Fprintf(stderr, "max-len and tab-width must not be negative\n")
+		flags.Usage()
+		return 2
+	}
+
+	cfg := &gocondense.Config{
 		MaxLen:   *maxLen,
 		TabWidth: *tabWidth,
-	})
+	}
+
+	if flags.NArg() == 0 {
+		return formatStdin(cfg, stdin, stdout, stderr)
+	}
+	return processArgs(cfg, flags.Args(), stderr)
+}
+
+// formatStdin reads Go source from stdin, formats it, and writes to stdout.
+func formatStdin(cfg *gocondense.Config, stdin io.Reader, stdout, stderr io.Writer) int {
+	input, err := io.ReadAll(stdin)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading from stdin: %v\n", err)
+		return 2
+	}
+	output, err := gocondense.New(cfg).Format(input)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error formatting code: %v\n", err)
+		return 2
+	}
+	if _, err := stdout.Write(output); err != nil {
+		fmt.Fprintf(stderr, "Error writing to stdout: %v\n", err)
+		return 2
+	}
+	return 0
+}
+
+// processArgs formats the given file and directory arguments concurrently.
+func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
+	formatter := gocondense.New(cfg)
 
 	// For directory walks, skip generated files automatically.
-	dirFormatter := gocondense.New(&gocondense.Config{
-		MaxLen:        *maxLen,
-		TabWidth:      *tabWidth,
-		SkipGenerated: true,
-	})
-
-	if flag.NArg() == 0 {
-		// Read from stdin
-		input, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading from stdin: %v\n", err)
-			os.Exit(2)
-		}
-		output, err := formatter.Format(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error formatting code: %v\n", err)
-			os.Exit(2)
-		}
-		if _, err := os.Stdout.Write(output); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing to stdout: %v\n", err)
-			os.Exit(2)
-		}
-		return
-	}
+	dirCfg := *cfg
+	dirCfg.SkipGenerated = true
+	dirFormatter := gocondense.New(&dirCfg)
 
 	var (
 		wg        sync.WaitGroup
 		hasErrors atomic.Bool
+		sem       = semaphore.NewWeighted(int64(runtime.NumCPU()))
 	)
-	sem := semaphore.NewWeighted(int64(runtime.NumCPU()))
 
-	for _, path := range flag.Args() {
-		arg := path
-		recursive := strings.HasSuffix(path, "/...")
-		if recursive {
-			path = strings.TrimSuffix(path, "/...")
-		}
-
-		info, err := os.Stat(path)
+	for _, arg := range args {
+		root, recursive := strings.CutSuffix(arg, "/...")
+		info, err := os.Stat(root)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error stating path %s: %v\n", path, err)
+			fmt.Fprintf(stderr, "Error stating path %s: %v\n", root, err)
 			hasErrors.Store(true)
 			continue
 		}
@@ -98,27 +116,27 @@ func main() { //nolint:funlen,gocognit
 			f = dirFormatter
 		}
 
-		err = filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
+		err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !d.IsDir() && strings.HasSuffix(path, ".go") {
+			if !d.IsDir() && strings.HasSuffix(p, ".go") {
 				_ = sem.Acquire(context.Background(), 1)
 				wg.Add(1)
-				go func(path string) {
+				go func() {
 					defer sem.Release(1)
 					defer wg.Done()
-					if !processFile(f, path) {
+					if !processFile(f, p, stderr) {
 						hasErrors.Store(true)
 					}
-				}(path)
-			} else if d.IsDir() && path != arg && (!recursive || filepath.Base(path) == "vendor") {
+				}()
+			} else if d.IsDir() && p != root && (!recursive || filepath.Base(p) == "vendor") {
 				return filepath.SkipDir
 			}
 			return nil
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error walking path %s: %v\n", path, err)
+			fmt.Fprintf(stderr, "Error walking path %s: %v\n", root, err)
 			hasErrors.Store(true)
 		}
 	}
@@ -126,26 +144,32 @@ func main() { //nolint:funlen,gocognit
 	wg.Wait()
 
 	if hasErrors.Load() {
-		os.Exit(2)
+		return 2
 	}
+	return 0
 }
 
-func processFile(formatter *gocondense.Formatter, filename string) bool {
+// processFile reads, formats, and writes back a single Go file.
+func processFile(formatter *gocondense.Formatter, filename string, stderr io.Writer) bool {
 	input, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading file %s: %v\n", filename, err)
+		fmt.Fprintf(stderr, "Error reading file %s: %v\n", filename, err)
 		return false
 	}
 
 	output, err := formatter.Format(input)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error formatting file %s: %v\n", filename, err)
+		fmt.Fprintf(stderr, "Error formatting file %s: %v\n", filename, err)
 		return false
+	}
+
+	if bytes.Equal(input, output) {
+		return true
 	}
 
 	err = os.WriteFile(filename, output, 0o600)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing file %s: %v\n", filename, err)
+		fmt.Fprintf(stderr, "Error writing file %s: %v\n", filename, err)
 		return false
 	}
 
