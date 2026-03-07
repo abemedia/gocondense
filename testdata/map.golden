@@ -14,3 +14,14 @@ func sameLine() {
 	p := map[string]string{"name": "John", "age": "30"}
 	println(p["name"])
 }
+
+// Multi-line value type, first element on same line - leave untouched.
+func multiLineValueTypeSameLine() {
+	p := map[string]struct {
+		Name string
+		Age  int
+	}{"a": {Name: "John", Age: 30},
+		"b": {Name: "Jane", Age: 25},
+	}
+	println(p["a"].Name)
+}

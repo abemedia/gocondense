@@ -1,17 +1,55 @@
 package main
 
-func main() {
+// Slice - condense.
+func slice() {
+	numbers := []int{
+		1,
+		2,
+		3,
+	}
+	println(len(numbers))
+}
+
+// Fixed-size array - condense.
+func fixedSize() {
 	numbers := [3]int{
 		1,
 		2,
 		3,
 	}
+	println(len(numbers))
+}
 
+// Ellipsis array - condense.
+func ellipsis() {
 	fruits := [...]string{
 		"apple",
 		"banana",
 		"cherry",
 	}
+	println(len(fruits))
+}
 
-	println(len(numbers), len(fruits))
+// Multi-line type, slice - leave untouched.
+func multiLineTypeSlice() {
+	s := []struct {
+		A string
+		B int
+	}{
+		{"x", 1},
+		{"y", 2},
+	}
+	println(len(s))
+}
+
+// Multi-line type, array - leave untouched.
+func multiLineTypeArray() {
+	a := [2]struct {
+		A string
+		B int
+	}{
+		{"x", 1},
+		{"y", 2},
+	}
+	println(len(a))
 }

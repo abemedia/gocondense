@@ -181,29 +181,23 @@ func (e *condenser) mergeFields(list *ast.FieldList) {
 	}
 }
 
-// condenseCompositeLit strips blank lines from composite literals and attempts
-// to collapse multi-line slice/array literals onto a single line.
-// For structs and maps with key-value pairs, the first-element rule applies:
-// condense only when the first element shares a line with the opening brace.
+// condenseCompositeLit trims blank lines and attempts to collapse multi-line
+// composite literals onto a single line. Literals with multi-line types are
+// not collapsed. Key-value literals (structs/maps) are only condensed when
+// the first element shares a line with the opening brace.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 	trimBlock(e, lit.Lbrace, lit.Rbrace, lit.Elts)
 	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
 
-	// First-element rule for key-value literals (structs/maps):
-	// only condense when first element shares a line with the opening brace.
-	var hasKeyValue bool
-	switch lit.Type.(type) {
-	case *ast.MapType:
-		hasKeyValue = true
-	default:
-		hasKeyValue = slices.ContainsFunc(lit.Elts, func(e ast.Expr) bool {
-			_, ok := e.(*ast.KeyValueExpr)
-			return ok
-		})
+	// Skip key-value literals whose first element is not on the same line as the opening brace.
+	if _, kv := lit.Elts[0].(*ast.KeyValueExpr); kv && e.line(lit.Lbrace) != e.line(lit.Elts[0].Pos()) {
+		return
 	}
-	if hasKeyValue && e.line(lit.Lbrace) != e.line(lit.Elts[0].Pos()) {
+
+	// Skip composite literals where the type spans multiple lines.
+	if !e.isSingleLine(lit.Type) {
 		return
 	}
 
