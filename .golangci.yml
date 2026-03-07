@@ -36,7 +36,10 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      - linters: [errcheck, funlen]
+      - linters:
+          - errcheck
+          - funlen
+          - gocognit
         path: (.+)_test.go
       - linters: [govet]
         text: 'shadow: declaration of "err" shadows declaration'
