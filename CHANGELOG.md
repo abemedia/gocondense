@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1](https://github.com/abemedia/gocondense/compare/v0.1.0...v0.1.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* **cli:** skip redundant writes, handle invalid flags, refactor CLI, add tests ([#67](https://github.com/abemedia/gocondense/issues/67)) ([38d179a](https://github.com/abemedia/gocondense/commit/38d179aea4c4bfa606ce33fa2f9f077b128e5a24))
+* condense and merge field lists atomically ([#71](https://github.com/abemedia/gocondense/issues/71)) ([2d6d0f4](https://github.com/abemedia/gocondense/commit/2d6d0f4230e53ed1323506501b366175d4f1fb6a))
+* skip condensing composite literals when type spans multiple lines ([#69](https://github.com/abemedia/gocondense/issues/69)) ([abc2717](https://github.com/abemedia/gocondense/commit/abc2717d52e1fbbfbb72dd32072976416da1b24b))
+
 ## [0.1.0](https://github.com/abemedia/gocondense/compare/v0.0.1...v0.1.0) (2026-03-06)
 
 
