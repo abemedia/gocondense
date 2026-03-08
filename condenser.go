@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 	node := c.Node()
 	if node == nil {
 		return true
@@ -64,12 +64,6 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 		}
 	case *ast.FieldList:
 		e.condenseFieldList(n)
-		switch c.Parent().(type) {
-		case *ast.FuncType, *ast.TypeSpec:
-			e.mergeFields(n)
-		case *ast.StructType, *ast.InterfaceType:
-			trimBlock(e, n.Opening, n.Closing, n.List)
-		}
 	case *ast.BlockStmt:
 		trimBlock(e, n.Lbrace, n.Rbrace, n.List)
 	case *ast.CaseClause:
@@ -131,49 +125,57 @@ func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr {
 	}
 }
 
-// condenseFieldList attempts to collapse a multi-line field list (params,
-// results, type params, or receivers) onto a single line.
+// condenseFieldList trims blank lines in a field list and, for type params
+// and function params/results/receivers, attempts to collapse it onto a
+// single line, merging adjacent fields with the same type.
 func (e *condenser) condenseFieldList(list *ast.FieldList) {
+	if !list.Opening.IsValid() {
+		return
+	}
+
+	trimBlock(e, list.Opening, list.Closing, list.List)
+
 	switch e.parent(1).(type) {
-	case *ast.FuncType, *ast.TypeSpec, *ast.FuncDecl:
-	default:
-		// StructType, InterfaceType - not condensed via this path.
+	case *ast.StructType, *ast.InterfaceType:
+		// Struct fields may have tags, and interface methods are unnamed,
+		// so neither can be merged or condensed onto a single line.
+		return
+	}
+
+	if e.hasComments(list) {
 		return
 	}
 
 	startLine, endLine := e.line(list.Pos()), e.line(list.End())
-	if startLine == endLine || e.hasComments(list) {
+	if startLine == endLine {
+		mergeFields(list)
 		return
 	}
 
-	// All children are already condensed. Check field types are simple and single-line.
 	for _, field := range list.List {
 		if !e.isSingleLine(field.Type) {
 			return
 		}
 	}
 
-	// Condense: remove lines to make the FieldList single-line.
-	saved := slices.Clone(e.tokenFile.Lines())
+	// Save line table and field names so both can be reverted atomically.
+	savedLines := slices.Clone(e.tokenFile.Lines())
+	savedFields := slices.Clone(list.List)
+	savedNames := make([][]*ast.Ident, len(list.List))
+	for i, f := range list.List {
+		savedNames[i] = f.Names
+	}
+
 	e.removeLines(startLine, endLine)
+	mergeFields(list)
 
 	// format.Node can't render a standalone FieldList, so verify against
 	// the parent node which IS renderable.
 	if !e.canCondense(e.parent(1)) {
-		e.tokenFile.SetLines(saved)
-	}
-}
-
-// mergeFields merges adjacent fields with the same type (e.g. `a T, b T` → `a, b T`).
-func (e *condenser) mergeFields(list *ast.FieldList) {
-	if !e.isSingleLine(list) || e.hasComments(list) {
-		return
-	}
-	for i := len(list.List) - 1; i > 0; i-- {
-		a, b := list.List[i-1], list.List[i]
-		if len(a.Names) > 0 && len(b.Names) > 0 && equalExpr(a.Type, b.Type) {
-			a.Names = append(a.Names, b.Names...)
-			list.List = slices.Delete(list.List, i, i+1)
+		e.tokenFile.SetLines(savedLines)
+		list.List = savedFields
+		for i, f := range savedFields {
+			f.Names = savedNames[i]
 		}
 	}
 }
@@ -396,6 +398,17 @@ func (e *condenser) condenseNode(node ast.Node) {
 
 	if !e.canCondense(node) {
 		e.tokenFile.SetLines(lines)
+	}
+}
+
+// mergeFields merges adjacent fields with the same type (e.g. `a T, b T` → `a, b T`).
+func mergeFields(list *ast.FieldList) {
+	for i := len(list.List) - 1; i > 0; i-- {
+		a, b := list.List[i-1], list.List[i]
+		if len(a.Names) > 0 && len(b.Names) > 0 && equalExpr(a.Type, b.Type) {
+			a.Names = append(a.Names, b.Names...)
+			list.List = slices.Delete(list.List, i, i+1)
+		}
 	}
 }
 
