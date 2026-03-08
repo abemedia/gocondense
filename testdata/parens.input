@@ -1,39 +1,80 @@
 package main
 
+// Top-level expression
+var _ = (x)
+
 func main() {
-	// Simple parentheses around identifiers and literals
-	x := (a) && (b)
-	y := (5) + (10)
-	z := (true) || (false)
+	// Expressions
+	_ = (variable)
+	_ = (((a + b)))
+	_ = (T{})
+	_ = !(value)
+	_ = (a) + (b * c) - (d)
+	_ = (a + b) * c
+	_ = a * (b + c)
+	_ = -(x + y)
 
-	// Parentheses around binary expressions with different precedence
-	result1 := (a + b) * c
-	result2 := a * (b + c)
-	result3 := (a && b) || c
-	result4 := a && (b || c)
+	// Type conversions
+	_ = (string)("foo")
+	_ = (*string)(nil)
+	_ = (chan int)(nil)
+	_ = (func())(nil)
 
-	// Unnecessary parentheses around simple expressions
-	simple := (variable)
-	literal := (42)
-	boolean := (true)
+	// Pointer dereference
+	_ = (*x)
+	_ = (*x).field
+	_ = (*x)[0]
+	_ = (*x)[0:1]
+	_ = (*x).(T)
 
-	// Unnecessary parentheses around types
-	valueType := (string)("foo")
-	pointerType := (*string)(nil)
+	// Binary/unary in single-value contexts
+	var _ = (a + b)
+	_ = []any{(a + b)}
+	_ = map[any]any{0: (a + b)}
+	switch {
+	case (a || b):
+	}
 
-	// Nested parentheses
-	nested := ((a))
-	deepNested := (((a + b)))
+	// Binary/unary in multi-value and key contexts
+	_, _ = (a + b), c
+	_ = []any{(a + b), c}
+	_ = map[any]any{(a + b): 0}
+	switch {
+	case (a || b), c:
+	}
 
-	// Mixed scenarios
-	mixed := (a) + (b * c) - (d)
+	// Composite literals in control flow headers
+	type T struct{ i int }
+	if (T{}.i) == 0 {
+	}
+	if (T{}) == (T{}) {
+	}
+	if x := (T{}); x.i == 0 {
+	}
+	for (T{}.i) > 0 {
+	}
+	switch (T{}.i) {
+	}
 
-	// Unary expressions that need parentheses
-	unary1 := -(x + y)  // Should keep parentheses
-	unary2 := !(a && b) // Should keep parentheses
-	unary3 := -(value)  // Should remove parentheses around simple value
-	unary4 := !(flag)   // Should remove parentheses around simple value
+	// Control flow headers with hidden composite literals
+	if (f(T{})) {
+	}
+	if (m[T{}]) {
+	}
+	if (x[T{}:]) {
+	}
 
-	// Composite literals might need parentheses
-	type T struct{ i int }; if (T{}.i) == 0 {} // Should keep parentheses
+	// Control flow headers without composite literals
+	if (x.(T)) {
+	}
+	if (*x) {
+	}
+	if (func() bool { return true }()) {
+	}
+	if (x) == 0 {
+	}
 }
+
+// Return statements
+func returnSingle() any       { return (a + b) }
+func returnMulti() (any, any) { return (a + b), c }
