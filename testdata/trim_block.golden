@@ -74,3 +74,30 @@ type s struct {
 type i interface {
 	Foo()
 }
+
+// FieldList (func params)
+func funcParams(
+	a int, // keep
+	b string,
+) {
+}
+
+// FieldList (func results)
+func funcResults() (
+	int,
+	error, // keep
+) {
+	return 0, nil
+}
+
+// FieldList (type params)
+type g[
+	A any, // keep
+	B any,
+] struct{}
+
+// FieldList (receiver)
+func (
+	s s, // keep
+) method() {
+}

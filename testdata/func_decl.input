@@ -104,13 +104,20 @@ func NoneCondensable[
 	return "", nil
 }
 
+// Merged signature fits in MaxLen but unmerged does not (84 > 80).
+func longInterfaceType(
+	a interface{ LongMethodName() string },
+	b interface{ LongMethodName() string },
+) {
+}
+
 // Multiline param type that exceeds max length - leave params uncondensed.
 func withMultilineParamType(
 	a int,
 	cb func(
-		longParamName int,
-		anotherLongParamName int,
-		yetAnotherLongParamName int,
+		longParamNameHere int,
+		anotherLongParamNameHere int,
+		yetAnotherLongParamNameHere int,
 	),
 ) {
 	cb(a, a, a)

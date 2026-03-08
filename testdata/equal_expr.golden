@@ -1,3 +1,5 @@
+// Each function exercises a different equalExpr branch to ensure all
+// supported AST type nodes are compared and merged correctly.
 package main
 
 import (
