@@ -121,6 +121,13 @@ func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr {
 		if p, ok := paren.X.(*ast.ParenExpr); ok {
 			return e.replaceParenExpr(p)
 		}
+
+		for n := range ast.Preorder(paren.X) {
+			if _, ok := n.(*ast.CompositeLit); ok {
+				return paren
+			}
+		}
+
 		return paren.X
 	}
 }
