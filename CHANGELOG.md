@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/abemedia/gocondense/compare/v0.1.1...v0.1.2) (2026-03-08)
+
+
+### Bug Fixes
+
+* context-aware paren removal for binary/unary exprs, type conversions, and composite lits ([#74](https://github.com/abemedia/gocondense/issues/74)) ([61d5d4b](https://github.com/abemedia/gocondense/commit/61d5d4b0a95284a47cb4477eb0c8bd3754c6f4ef))
+* don’t remove parentheses around composite literals ([#72](https://github.com/abemedia/gocondense/issues/72)) ([f4a9395](https://github.com/abemedia/gocondense/commit/f4a93957f1432a5d7a7a0c25998baaa4921d9e44))
+
 ## [0.1.1](https://github.com/abemedia/gocondense/compare/v0.1.0...v0.1.1) (2026-03-08)
 
 
