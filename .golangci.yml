@@ -24,6 +24,9 @@ linters:
   settings:
     cyclop:
       max-complexity: 20
+    funlen:
+      # Complexity is already covered by cyclop and gocognit.
+      statements: -1
     govet:
       enable-all: true
       disable: [fieldalignment]
