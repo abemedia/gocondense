@@ -59,8 +59,8 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 			c.Replace(newNode)
 		}
 	case *ast.ParenExpr:
-		if newNode := e.replaceParenExpr(n); newNode != node {
-			c.Replace(newNode)
+		if e.canRemoveParens(n) {
+			c.Replace(n.X)
 		}
 	case *ast.FieldList:
 		e.condenseFieldList(n)
@@ -110,50 +110,47 @@ func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
 	}
 }
 
-// replaceParenExpr removes unnecessary parentheses. Binary/unary parens
-// are kept by default and only stripped in unambiguous single-value contexts.
+// canRemoveParens reports whether the parentheses can be safely removed.
+// Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr { //nolint:cyclop,funlen
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop,funlen
 	switch paren.X.(type) {
 	case *ast.ChanType, *ast.FuncType:
-		return paren
+		return false
 	case *ast.StarExpr:
 		switch e.parent(1).(type) {
 		case *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.SliceExpr, *ast.CallExpr, *ast.TypeAssertExpr:
-			return paren
+			return false
 		}
 	case *ast.BinaryExpr, *ast.UnaryExpr:
-		var strip bool
 		switch p := e.parent(1).(type) {
 		case *ast.AssignStmt:
-			strip = len(p.Rhs) == 1
+			return len(p.Rhs) == 1
 		case *ast.ValueSpec:
-			strip = len(p.Values) == 1
+			return len(p.Values) == 1
 		case *ast.ReturnStmt:
-			strip = len(p.Results) == 1
+			return len(p.Results) == 1
 		case *ast.CaseClause:
-			strip = len(p.List) == 1
+			return len(p.List) == 1
 		case *ast.CompositeLit:
-			strip = len(p.Elts) == 1
+			return len(p.Elts) == 1
 		case *ast.KeyValueExpr:
-			strip = p.Key != paren
+			return p.Key != paren
 		case *ast.ExprStmt, *ast.ParenExpr:
-			strip = true
+			return true
+		default:
+			return false
 		}
-		if strip {
-			return paren.X
-		}
-		return paren
 	}
 
 	for i := len(e.parents) - 2; i >= 0; i-- {
 		switch e.parents[i].(type) {
+		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncDecl, *ast.FuncLit, *ast.ParenExpr:
+			return true
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt:
 			for expr := paren.X; ; {
 				switch e := expr.(type) {
-				case *ast.CompositeLit:
-					return paren
 				case *ast.SelectorExpr:
 					expr = e.X
 				case *ast.CallExpr:
@@ -166,16 +163,16 @@ func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr { //nolint:c
 					expr = e.X
 				case *ast.StarExpr:
 					expr = e.X
+				case *ast.CompositeLit:
+					return false
 				default:
-					return paren.X
+					return true
 				}
 			}
-		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncDecl, *ast.FuncLit:
-			return paren.X
 		}
 	}
 
-	return paren.X
+	return true
 }
 
 // condenseFieldList trims blank lines in a field list and, for type params
