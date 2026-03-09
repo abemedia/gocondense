@@ -53,3 +53,6 @@ func funcType(a, b func(int) int) {}
 
 // ellipsis: *ast.Ellipsis (variadic inside func type)
 func ellipsis(a, b func(...int)) {}
+
+// structType: *ast.StructType
+func structType(a, b struct{ X int }) {}

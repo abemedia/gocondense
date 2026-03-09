@@ -481,7 +481,7 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
 		return ok && equalExpr(x.X, y.X)
 	case *ast.SelectorExpr:
 		y, ok := b.(*ast.SelectorExpr)
-		return ok && equalExpr(x.X, y.X) && x.Sel.Name == y.Sel.Name
+		return ok && x.Sel.Name == y.Sel.Name && equalExpr(x.X, y.X)
 	case *ast.ArrayType:
 		y, ok := b.(*ast.ArrayType)
 		return ok && equalExpr(x.Len, y.Len) && equalExpr(x.Elt, y.Elt)
@@ -505,25 +505,27 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
 		return ok && equalExpr(x.Elt, y.Elt)
 	case *ast.InterfaceType:
 		y, ok := b.(*ast.InterfaceType)
-		return ok && slices.EqualFunc(x.Methods.List, y.Methods.List, func(xf, yf *ast.Field) bool {
-			return slices.EqualFunc(xf.Names, yf.Names, func(xi, yi *ast.Ident) bool {
-				return xi.Name == yi.Name
-			}) && equalExpr(xf.Type, yf.Type)
-		})
+		return ok && equalFieldList(x.Methods, y.Methods)
 	case *ast.FuncType:
 		y, ok := b.(*ast.FuncType)
 		return ok && equalFieldList(x.Params, y.Params) && equalFieldList(x.Results, y.Results)
+	case *ast.StructType:
+		y, ok := b.(*ast.StructType)
+		return ok && equalFieldList(x.Fields, y.Fields)
 	default:
 		return false
 	}
 }
 
-// equalFieldList reports whether two field lists are structurally equal by type.
+// equalFieldList reports whether two field lists are structurally equal.
 func equalFieldList(a, b *ast.FieldList) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
 	return slices.EqualFunc(a.List, b.List, func(x, y *ast.Field) bool {
-		return equalExpr(x.Type, y.Type)
+		return slices.EqualFunc(x.Names, y.Names, func(xi, yi *ast.Ident) bool {
+			return xi.Name == yi.Name
+		}) && equalExpr(x.Type, y.Type) &&
+			(x.Tag == y.Tag || x.Tag != nil && y.Tag != nil && x.Tag.Value == y.Tag.Value)
 	})
 }
