@@ -43,6 +43,7 @@ linters:
           - errcheck
           - funlen
           - gocognit
+          - maintidx
         path: (.+)_test.go
       - linters: [govet]
         text: 'shadow: declaration of "err" shadows declaration'

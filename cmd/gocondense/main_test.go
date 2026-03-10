@@ -127,13 +127,7 @@ func TestRun(t *testing.T) {
 		},
 		// Files
 		{
-			name:      "single_file",
-			args:      []string{"test.go"},
-			files:     map[string]string{"test.go": uncondensed},
-			wantFiles: map[string]string{"test.go": condensed},
-		},
-		{
-			name: "multiple_files",
+			name: "files",
 			args: []string{"a.go", "b.go"},
 			files: map[string]string{
 				"a.go": uncondensed,
@@ -142,22 +136,6 @@ func TestRun(t *testing.T) {
 			wantFiles: map[string]string{
 				"a.go": condensed,
 				"b.go": condensed,
-			},
-		},
-		{
-			name:      "generated_file_direct",
-			args:      []string{"generated.go"},
-			files:     map[string]string{"generated.go": generated},
-			wantFiles: map[string]string{"generated.go": generatedCondensed},
-		},
-		{
-			name: "vendor_dir_direct",
-			args: []string{"vendor"},
-			files: map[string]string{
-				"vendor/v.go": uncondensed,
-			},
-			wantFiles: map[string]string{
-				"vendor/v.go": condensed,
 			},
 		},
 		{
@@ -196,34 +174,80 @@ func TestRun(t *testing.T) {
 				"sub/sub.go": condensed,
 			},
 		},
+		// Skipping
 		{
-			name: "generated_file_skipping",
-			args: []string{"."},
-			files: map[string]string{
-				"generated.go": generated,
-			},
-			wantFiles: map[string]string{
-				"generated.go": generated,
-			},
-		},
-		{
-			name: "vendor_dir_skipping",
+			name: "skip",
 			args: []string{"./..."},
 			files: map[string]string{
-				"vendor/v.go": uncondensed,
+				".hidden.go":    uncondensed,
+				"generated.go":  generated,
+				"not_go.txt":    uncondensed,
+				"testdata/t.go": uncondensed,
+				"vendor/v.go":   uncondensed,
 			},
 			wantFiles: map[string]string{
-				"vendor/v.go": uncondensed,
+				".hidden.go":    uncondensed,
+				"generated.go":  generated,
+				"not_go.txt":    uncondensed,
+				"testdata/t.go": uncondensed,
+				"vendor/v.go":   uncondensed,
 			},
 		},
 		{
-			name: "non_go_files_ignored",
-			args: []string{"."},
+			name: "bypass_skip",
+			args: []string{"generated.go", "not_go.txt", "vendor", "testdata", "tools"},
 			files: map[string]string{
-				"readme.txt": "not a go file",
+				"go.mod":        "module test\n\ngo 1.25\n\nignore tools\n",
+				"generated.go":  generated,
+				"not_go.txt":    uncondensed,
+				"testdata/t.go": uncondensed,
+				"tools/tool.go": uncondensed,
+				"vendor/v.go":   uncondensed,
 			},
 			wantFiles: map[string]string{
-				"readme.txt": "not a go file",
+				"generated.go":  generatedCondensed,
+				"not_go.txt":    condensed,
+				"testdata/t.go": condensed,
+				"tools/tool.go": condensed,
+				"vendor/v.go":   condensed,
+			},
+		},
+		{
+			name: "gomod_ignore",
+			args: []string{"./..."},
+			files: map[string]string{
+				"go.mod":             "module test\n\ngo 1.25\n\nignore gen\n\nignore ./tools\n",
+				"sub/gen/gen.go":     uncondensed,
+				"sub/tools/tools.go": uncondensed,
+				"tools/tools.go":     uncondensed,
+			},
+			wantFiles: map[string]string{
+				"sub/gen/gen.go":     uncondensed, // ignore gen: matches at any depth
+				"sub/tools/tools.go": condensed,   // ignore ./tools: no match at depth
+				"tools/tools.go":     uncondensed, // ignore ./tools: matches at root
+			},
+		},
+		{
+			name: "gomod_ignore_nested_module",
+			args: []string{"./..."},
+			files: map[string]string{
+				"go.mod":         "module test\n\ngo 1.25\n\nignore gen\n",
+				"sub/go.mod":     "module test/sub\n\ngo 1.25\n",
+				"sub/gen/gen.go": uncondensed,
+			},
+			wantFiles: map[string]string{
+				"sub/gen/gen.go": condensed,
+			},
+		},
+		{
+			name: "malformed_gomod",
+			args: []string{"./..."},
+			files: map[string]string{
+				"go.mod":     "invalid{",
+				"sub/sub.go": uncondensed,
+			},
+			wantFiles: map[string]string{
+				"sub/sub.go": condensed,
 			},
 		},
 	}
@@ -231,6 +255,7 @@ func TestRun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Chdir(t.TempDir())
+			clear(modIgnoreCache)
 
 			for name, content := range tt.files {
 				if err := os.MkdirAll(path.Dir(name), 0o755); err != nil {

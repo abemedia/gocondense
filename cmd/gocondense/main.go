@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/abemedia/gocondense"
@@ -104,6 +106,10 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 
 	for _, arg := range args {
 		root, recursive := strings.CutSuffix(arg, "/...")
+		if recursive && root == "" {
+			root = "/" // Avoid empty root when arg is "/..."
+		}
+		root = filepath.Clean(root)
 		info, err := os.Stat(root)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error stating path %s: %v\n", root, err)
@@ -117,10 +123,14 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 		}
 
 		err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
+			switch {
+			case err != nil:
 				return err
-			}
-			if !d.IsDir() && strings.HasSuffix(p, ".go") {
+			case d.IsDir():
+				if p != root && (!recursive || shouldIgnore(p)) {
+					return filepath.SkipDir
+				}
+			case p == root, strings.HasSuffix(d.Name(), ".go") && !strings.HasPrefix(d.Name(), "."):
 				_ = sem.Acquire(context.Background(), 1)
 				wg.Add(1)
 				go func() {
@@ -130,8 +140,6 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 						hasErrors.Store(true)
 					}
 				}()
-			} else if d.IsDir() && p != root && (!recursive || filepath.Base(p) == "vendor") {
-				return filepath.SkipDir
 			}
 			return nil
 		})
@@ -140,9 +148,7 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 			hasErrors.Store(true)
 		}
 	}
-
 	wg.Wait()
-
 	if hasErrors.Load() {
 		return 2
 	}
@@ -174,4 +180,74 @@ func processFile(formatter *gocondense.Formatter, filename string, stderr io.Wri
 	}
 
 	return true
+}
+
+// shouldIgnore reports whether dir should be skipped.
+func shouldIgnore(dir string) bool {
+	switch filepath.Base(dir) {
+	case "vendor", "testdata":
+		return true
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	root, paths := loadModIgnore(abs)
+	if len(paths) == 0 {
+		return false
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(rel)
+	for _, path := range paths {
+		p, rooted := strings.CutPrefix(path, "./")
+		p = strings.Trim(p, "/")
+		if rel == p || (!rooted && strings.HasSuffix(rel, "/"+p)) {
+			return true
+		}
+	}
+	return false
+}
+
+type modIgnore struct {
+	dir   string
+	paths []string
+}
+
+// modIgnoreCache caches go.mod ignore directives by directory path.
+// Safe without synchronization: only accessed from the sequential WalkDir callback.
+var modIgnoreCache = map[string]modIgnore{}
+
+// loadModIgnore returns the go.mod ignore directives for dir.
+func loadModIgnore(dir string) (root string, paths []string) {
+	if ig, ok := modIgnoreCache[dir]; ok {
+		return ig.dir, ig.paths
+	}
+
+	root, paths = func() (string, []string) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return "", nil
+			}
+			if parent := filepath.Dir(dir); parent != dir {
+				return loadModIgnore(parent)
+			}
+			return "", nil
+		}
+		f, err := modfile.ParseLax("go.mod", data, nil)
+		if err != nil {
+			return "", nil
+		}
+		ignore := make([]string, len(f.Ignore))
+		for i, ig := range f.Ignore {
+			ignore[i] = ig.Path
+		}
+		return dir, ignore
+	}()
+
+	modIgnoreCache[dir] = modIgnore{root, paths}
+	return root, paths
 }
