@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	node := c.Node()
 	if node == nil {
 		return true
@@ -65,11 +65,11 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 	case *ast.FieldList:
 		e.condenseFieldList(n)
 	case *ast.BlockStmt:
-		trimBlock(e, n.Lbrace, n.Rbrace, n.List)
+		trim(e, n.Lbrace, n.Rbrace, n.List)
 	case *ast.CaseClause:
-		trimBlock(e, n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CommClause:
-		trimBlock(e, n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CompositeLit:
 		e.condenseCompositeLit(n)
 	case *ast.CallExpr:
@@ -86,6 +86,20 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 		if !e.isSingleLine(n) && e.isSingleLine(n.X) && !e.hasComments(n) &&
 			!slices.ContainsFunc(n.Indices, func(idx ast.Expr) bool { return !e.isSingleLine(idx) }) {
 			e.condenseNode(n)
+		}
+	case *ast.AssignStmt:
+		if !e.hasCommentsInRange(n.TokPos, n.Rhs[0].Pos()) {
+			e.removeLines(e.line(n.TokPos), e.line(n.Rhs[0].Pos()))
+		} else {
+			trimTop(e, n.TokPos, n.End(), n.Rhs)
+		}
+	case *ast.ValueSpec:
+		if len(n.Values) > 0 {
+			start := n.Pos()
+			if n.Type != nil {
+				start = n.Type.End()
+			}
+			trimTop(e, start, n.End(), n.Values)
 		}
 	}
 
@@ -114,7 +128,7 @@ func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
 // Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop,funlen
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
 	switch paren.X.(type) {
 	case *ast.ChanType, *ast.FuncType:
 		return false
@@ -183,7 +197,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 		return
 	}
 
-	trimBlock(e, list.Opening, list.Closing, list.List)
+	trim(e, list.Opening, list.Closing, list.List)
 
 	switch e.parent(1).(type) {
 	case *ast.StructType, *ast.InterfaceType:
@@ -235,7 +249,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 // not collapsed. Key-value literals (structs/maps) are only condensed when
 // the first element shares a line with the opening brace.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
-	trimBlock(e, lit.Lbrace, lit.Rbrace, lit.Elts)
+	trim(e, lit.Lbrace, lit.Rbrace, lit.Elts)
 	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
@@ -301,37 +315,23 @@ func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
 	}
 }
 
-// trimBlock collapses empty block-like nodes and trims leading/trailing
-// blank lines from non-empty ones.
+// trim removes blank lines between the delimiters and their nearest children,
+// stopping at comments. Empty regions are collapsed.
 //
 // TODO: convert to a method once https://github.com/golang/go/issues/77273 lands.
-func trimBlock[T ast.Node](e *condenser, start, end token.Pos, children []T) {
+func trim[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	if len(children) == 0 && !e.hasCommentsInRange(start, end) {
 		e.removeLines(e.line(start), e.line(end))
 		return
 	}
 
-	// Determine first child start and last child end positions.
-	first, last := end, start
+	trimTop(e, start, end, children)
+
+	// Trim blank lines between the closing delimiter and the last child.
+	last := start
 	if len(children) > 0 {
-		first, last = children[0].Pos(), children[len(children)-1].End()
+		last = children[len(children)-1].End()
 	}
-
-	// Trim leading blank lines between the opening delimiter and the first child.
-	startLine := e.line(start)
-	firstLine := e.line(first)
-	if firstLine > startLine+1 {
-		leading := 0
-		for l := startLine + 1; l < firstLine; l++ {
-			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-				break
-			}
-			leading++
-		}
-		e.removeLines(startLine, startLine+leading)
-	}
-
-	// Trim trailing blank lines between the last child and the closing delimiter.
 	endLine := e.line(end)
 	lastLine := e.line(last)
 	if endLine > lastLine+1 {
@@ -343,6 +343,29 @@ func trimBlock[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 			trailing++
 		}
 		e.removeLines(endLine-trailing-1, endLine-1)
+	}
+}
+
+// trimTop removes blank lines between the opening delimiter and the first
+// child, stopping at comments.
+//
+// TODO: convert to a method once https://github.com/golang/go/issues/77273 lands.
+func trimTop[T ast.Node](e *condenser, start, end token.Pos, children []T) {
+	first := end
+	if len(children) > 0 {
+		first = children[0].Pos()
+	}
+	startLine := e.line(start)
+	firstLine := e.line(first)
+	if firstLine > startLine+1 {
+		leading := 0
+		for l := startLine + 1; l < firstLine; l++ {
+			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+				break
+			}
+			leading++
+		}
+		e.removeLines(startLine, startLine+leading)
 	}
 }
 
@@ -465,7 +488,7 @@ func mergeFields(list *ast.FieldList) {
 }
 
 // equalExpr reports whether two AST type expressions are structurally equal.
-func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
+func equalExpr(a, b ast.Expr) bool { //nolint:cyclop
 	if a == nil || b == nil {
 		return a == b
 	}

@@ -1,0 +1,35 @@
+package main
+
+func main() {
+	// Assign: inline comment - remove blank line.
+	a := 1 // inline
+
+	// Assign: comment before value - remove blank line, keep comment.
+	b :=
+		// important
+		2
+
+	// Assign: comment on operator line - remove blank line, keep comment.
+	c := // important
+		3
+
+	// Var: inline comment - remove blank line.
+	var d = 4 // inline
+
+	// Var: comment before value - remove blank line, keep comment.
+	var e =
+	// important
+	5
+
+	// Var: comment on operator line - remove blank line, keep comment.
+	var f = // important
+	6
+
+	// Var: multi-line type - remove blank line, preserve type body.
+	var g *struct {
+		A int
+	} = nil
+
+	// Var: multi-line func type - remove blank line, condense params.
+	var h func(a, b int) = nil
+}
