@@ -27,10 +27,9 @@ gocondense ./...                  # format all .go files recursively
 cat file.go | gocondense          # read from stdin, write to stdout
 ```
 
-When no arguments are provided, the formatter reads from standard input and
-writes the result to standard output. When file or directory arguments are
-provided, source files are modified in-place. Generated files and vendor
-directories are skipped during directory walks.
+Files are modified in-place. Generated files, `vendor` and `testdata`
+directories, as well as paths listed in `go.mod` `ignore` directives are skipped
+unless explicitly specified as arguments.
 
 | Flag          | Description                                                             | Default |
 | ------------- | ----------------------------------------------------------------------- | ------- |
