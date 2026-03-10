@@ -54,9 +54,8 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 
 	switch n := node.(type) {
 	case *ast.GenDecl:
-		if newNode := e.replaceGenDecl(n); newNode != node && e.canCondense(newNode) {
-			e.removeLines(e.line(n.Pos()), e.line(n.End()))
-			c.Replace(newNode)
+		if e.simplifyGenDecl(n) {
+			c.Delete()
 		}
 	case *ast.ParenExpr:
 		if e.canRemoveParens(n) {
@@ -108,20 +107,24 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	return true
 }
 
-// replaceGenDecl unwraps single-spec declaration groups by returning a copy
-// without parentheses. Multi-spec groups, groups without parens, and groups
-// containing comments are returned unchanged.
-func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
-	if len(decl.Specs) > 1 || decl.Lparen == token.NoPos || e.hasComments(decl) {
-		return decl
+// simplifyGenDecl simplifies grouped declarations. It trims blank lines in
+// multi-spec or commented groups, removes parens from single-spec groups, and
+// reports whether the declaration is empty and should be deleted.
+func (e *condenser) simplifyGenDecl(decl *ast.GenDecl) bool {
+	switch {
+	case !decl.Lparen.IsValid():
+	case len(decl.Specs) > 1, e.hasComments(decl):
+		trim(e, decl.Lparen, decl.Rparen, decl.Specs)
+	case decl.Specs != nil:
+		start, end := e.line(decl.Lparen), e.line(decl.Rparen)
+		decl.Lparen, decl.Rparen = token.NoPos, token.NoPos
+		e.removeLines(e.line(decl.Specs[0].End()), end)
+		e.removeLines(start, e.line(decl.Specs[0].Pos()))
+	case decl.Doc != nil:
+	default:
+		return true
 	}
-
-	return &ast.GenDecl{
-		Doc:    decl.Doc,
-		Tok:    decl.Tok,
-		TokPos: decl.TokPos,
-		Specs:  decl.Specs,
-	}
+	return false
 }
 
 // canRemoveParens reports whether the parentheses can be safely removed.

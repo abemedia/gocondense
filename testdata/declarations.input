@@ -1,0 +1,85 @@
+package main
+
+// Single-spec groups have parentheses removed.
+
+import (
+
+	"fmt"
+
+)
+
+import (
+	f "os"
+)
+
+// Multi-spec groups keep parentheses. Blank lines are trimmed.
+
+import (
+
+	"bytes"
+
+	"strings"
+
+)
+
+// Groups with comments keep parentheses.
+
+import (
+	"io" // inline comment
+)
+
+// Empty groups are removed.
+
+import (
+)
+
+// Empty groups with nested comments are kept and trimmed.
+
+import (
+
+// nested comment
+
+)
+
+// Empty groups with doc comments are kept.
+
+// doc comment
+import (
+)
+
+// Multi-line specs are not collapsed
+
+type (
+	z struct{
+		X int
+	}
+)
+
+// Parentheses are also removed from var, const, and type groups.
+
+var (
+	x = 1
+)
+
+const (
+	c = 3.14
+)
+
+type (
+	T int
+)
+
+type (
+	S = string
+)
+
+// Empty var, const, and type groups are also removed.
+
+var (
+)
+
+const (
+)
+
+type (
+)
