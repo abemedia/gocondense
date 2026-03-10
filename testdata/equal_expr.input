@@ -10,7 +10,8 @@ import (
 type Pair[
 	A any,
 	B any,
-] struct{}
+] struct{
+}
 
 // ident: *ast.Ident
 func ident(
@@ -114,5 +115,12 @@ func funcType(
 func ellipsis(
 	a func(...int),
 	b func(...int),
+) {
+}
+
+// structType: *ast.StructType
+func structType(
+	a struct{ X int },
+	b struct{ X int },
 ) {
 }

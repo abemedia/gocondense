@@ -346,6 +346,32 @@ type I interface {
 
 </details>
 
+<details><summary><b>Remove blank lines after assignment operators</b></summary>
+
+Blank lines between an assignment operator (`:=` or `=`) and the value are
+removed. When a comment appears between the operator and the value, blank lines
+are removed but the comment is preserved on its own line.
+
+```go
+a :=
+    1
+
+var b =
+
+// comment
+2
+```
+
+```go
+a := 1
+
+var b =
+// comment
+2
+```
+
+</details>
+
 <details><summary><b>Collapse empty blocks</b></summary>
 
 Empty function bodies, struct definitions, and interface definitions are

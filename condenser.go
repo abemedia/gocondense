@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	node := c.Node()
 	if node == nil {
 		return true
@@ -59,17 +59,17 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 			c.Replace(newNode)
 		}
 	case *ast.ParenExpr:
-		if newNode := e.replaceParenExpr(n); newNode != node {
-			c.Replace(newNode)
+		if e.canRemoveParens(n) {
+			c.Replace(n.X)
 		}
 	case *ast.FieldList:
 		e.condenseFieldList(n)
 	case *ast.BlockStmt:
-		trimBlock(e, n.Lbrace, n.Rbrace, n.List)
+		trim(e, n.Lbrace, n.Rbrace, n.List)
 	case *ast.CaseClause:
-		trimBlock(e, n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CommClause:
-		trimBlock(e, n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CompositeLit:
 		e.condenseCompositeLit(n)
 	case *ast.CallExpr:
@@ -86,6 +86,20 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop
 		if !e.isSingleLine(n) && e.isSingleLine(n.X) && !e.hasComments(n) &&
 			!slices.ContainsFunc(n.Indices, func(idx ast.Expr) bool { return !e.isSingleLine(idx) }) {
 			e.condenseNode(n)
+		}
+	case *ast.AssignStmt:
+		if !e.hasCommentsInRange(n.TokPos, n.Rhs[0].Pos()) {
+			e.removeLines(e.line(n.TokPos), e.line(n.Rhs[0].Pos()))
+		} else {
+			trimTop(e, n.TokPos, n.End(), n.Rhs)
+		}
+	case *ast.ValueSpec:
+		if len(n.Values) > 0 {
+			start := n.Pos()
+			if n.Type != nil {
+				start = n.Type.End()
+			}
+			trimTop(e, start, n.End(), n.Values)
 		}
 	}
 
@@ -110,50 +124,47 @@ func (e *condenser) replaceGenDecl(decl *ast.GenDecl) *ast.GenDecl {
 	}
 }
 
-// replaceParenExpr removes unnecessary parentheses. Binary/unary parens
-// are kept by default and only stripped in unambiguous single-value contexts.
+// canRemoveParens reports whether the parentheses can be safely removed.
+// Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr { //nolint:cyclop,funlen
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
 	switch paren.X.(type) {
 	case *ast.ChanType, *ast.FuncType:
-		return paren
+		return false
 	case *ast.StarExpr:
 		switch e.parent(1).(type) {
 		case *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.SliceExpr, *ast.CallExpr, *ast.TypeAssertExpr:
-			return paren
+			return false
 		}
 	case *ast.BinaryExpr, *ast.UnaryExpr:
-		var strip bool
 		switch p := e.parent(1).(type) {
 		case *ast.AssignStmt:
-			strip = len(p.Rhs) == 1
+			return len(p.Rhs) == 1
 		case *ast.ValueSpec:
-			strip = len(p.Values) == 1
+			return len(p.Values) == 1
 		case *ast.ReturnStmt:
-			strip = len(p.Results) == 1
+			return len(p.Results) == 1
 		case *ast.CaseClause:
-			strip = len(p.List) == 1
+			return len(p.List) == 1
 		case *ast.CompositeLit:
-			strip = len(p.Elts) == 1
+			return len(p.Elts) == 1
 		case *ast.KeyValueExpr:
-			strip = p.Key != paren
+			return p.Key != paren
 		case *ast.ExprStmt, *ast.ParenExpr:
-			strip = true
+			return true
+		default:
+			return false
 		}
-		if strip {
-			return paren.X
-		}
-		return paren
 	}
 
 	for i := len(e.parents) - 2; i >= 0; i-- {
 		switch e.parents[i].(type) {
+		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncDecl, *ast.FuncLit, *ast.ParenExpr:
+			return true
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt:
 			for expr := paren.X; ; {
 				switch e := expr.(type) {
-				case *ast.CompositeLit:
-					return paren
 				case *ast.SelectorExpr:
 					expr = e.X
 				case *ast.CallExpr:
@@ -166,16 +177,16 @@ func (e *condenser) replaceParenExpr(paren *ast.ParenExpr) ast.Expr { //nolint:c
 					expr = e.X
 				case *ast.StarExpr:
 					expr = e.X
+				case *ast.CompositeLit:
+					return false
 				default:
-					return paren.X
+					return true
 				}
 			}
-		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncDecl, *ast.FuncLit:
-			return paren.X
 		}
 	}
 
-	return paren.X
+	return true
 }
 
 // condenseFieldList trims blank lines in a field list and, for type params
@@ -186,7 +197,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 		return
 	}
 
-	trimBlock(e, list.Opening, list.Closing, list.List)
+	trim(e, list.Opening, list.Closing, list.List)
 
 	switch e.parent(1).(type) {
 	case *ast.StructType, *ast.InterfaceType:
@@ -238,7 +249,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 // not collapsed. Key-value literals (structs/maps) are only condensed when
 // the first element shares a line with the opening brace.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
-	trimBlock(e, lit.Lbrace, lit.Rbrace, lit.Elts)
+	trim(e, lit.Lbrace, lit.Rbrace, lit.Elts)
 	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
@@ -304,37 +315,23 @@ func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
 	}
 }
 
-// trimBlock collapses empty block-like nodes and trims leading/trailing
-// blank lines from non-empty ones.
+// trim removes blank lines between the delimiters and their nearest children,
+// stopping at comments. Empty regions are collapsed.
 //
 // TODO: convert to a method once https://github.com/golang/go/issues/77273 lands.
-func trimBlock[T ast.Node](e *condenser, start, end token.Pos, children []T) {
+func trim[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	if len(children) == 0 && !e.hasCommentsInRange(start, end) {
 		e.removeLines(e.line(start), e.line(end))
 		return
 	}
 
-	// Determine first child start and last child end positions.
-	first, last := end, start
+	trimTop(e, start, end, children)
+
+	// Trim blank lines between the closing delimiter and the last child.
+	last := start
 	if len(children) > 0 {
-		first, last = children[0].Pos(), children[len(children)-1].End()
+		last = children[len(children)-1].End()
 	}
-
-	// Trim leading blank lines between the opening delimiter and the first child.
-	startLine := e.line(start)
-	firstLine := e.line(first)
-	if firstLine > startLine+1 {
-		leading := 0
-		for l := startLine + 1; l < firstLine; l++ {
-			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-				break
-			}
-			leading++
-		}
-		e.removeLines(startLine, startLine+leading)
-	}
-
-	// Trim trailing blank lines between the last child and the closing delimiter.
 	endLine := e.line(end)
 	lastLine := e.line(last)
 	if endLine > lastLine+1 {
@@ -346,6 +343,29 @@ func trimBlock[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 			trailing++
 		}
 		e.removeLines(endLine-trailing-1, endLine-1)
+	}
+}
+
+// trimTop removes blank lines between the opening delimiter and the first
+// child, stopping at comments.
+//
+// TODO: convert to a method once https://github.com/golang/go/issues/77273 lands.
+func trimTop[T ast.Node](e *condenser, start, end token.Pos, children []T) {
+	first := end
+	if len(children) > 0 {
+		first = children[0].Pos()
+	}
+	startLine := e.line(start)
+	firstLine := e.line(first)
+	if firstLine > startLine+1 {
+		leading := 0
+		for l := startLine + 1; l < firstLine; l++ {
+			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
+				break
+			}
+			leading++
+		}
+		e.removeLines(startLine, startLine+leading)
 	}
 }
 
@@ -468,7 +488,7 @@ func mergeFields(list *ast.FieldList) {
 }
 
 // equalExpr reports whether two AST type expressions are structurally equal.
-func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
+func equalExpr(a, b ast.Expr) bool { //nolint:cyclop
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -481,7 +501,7 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
 		return ok && equalExpr(x.X, y.X)
 	case *ast.SelectorExpr:
 		y, ok := b.(*ast.SelectorExpr)
-		return ok && equalExpr(x.X, y.X) && x.Sel.Name == y.Sel.Name
+		return ok && x.Sel.Name == y.Sel.Name && equalExpr(x.X, y.X)
 	case *ast.ArrayType:
 		y, ok := b.(*ast.ArrayType)
 		return ok && equalExpr(x.Len, y.Len) && equalExpr(x.Elt, y.Elt)
@@ -505,25 +525,27 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,funlen
 		return ok && equalExpr(x.Elt, y.Elt)
 	case *ast.InterfaceType:
 		y, ok := b.(*ast.InterfaceType)
-		return ok && slices.EqualFunc(x.Methods.List, y.Methods.List, func(xf, yf *ast.Field) bool {
-			return slices.EqualFunc(xf.Names, yf.Names, func(xi, yi *ast.Ident) bool {
-				return xi.Name == yi.Name
-			}) && equalExpr(xf.Type, yf.Type)
-		})
+		return ok && equalFieldList(x.Methods, y.Methods)
 	case *ast.FuncType:
 		y, ok := b.(*ast.FuncType)
 		return ok && equalFieldList(x.Params, y.Params) && equalFieldList(x.Results, y.Results)
+	case *ast.StructType:
+		y, ok := b.(*ast.StructType)
+		return ok && equalFieldList(x.Fields, y.Fields)
 	default:
 		return false
 	}
 }
 
-// equalFieldList reports whether two field lists are structurally equal by type.
+// equalFieldList reports whether two field lists are structurally equal.
 func equalFieldList(a, b *ast.FieldList) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
 	return slices.EqualFunc(a.List, b.List, func(x, y *ast.Field) bool {
-		return equalExpr(x.Type, y.Type)
+		return slices.EqualFunc(x.Names, y.Names, func(xi, yi *ast.Ident) bool {
+			return xi.Name == yi.Name
+		}) && equalExpr(x.Type, y.Type) &&
+			(x.Tag == y.Tag || x.Tag != nil && y.Tag != nil && x.Tag.Value == y.Tag.Value)
 	})
 }
