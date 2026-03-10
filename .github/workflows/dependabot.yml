@@ -1,0 +1,20 @@
+name: Dependabot
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    name: Merge
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - uses: fastify/github-action-merge-dependabot@v3
+        with:
+          target: patch
+          use-github-auto-merge: true

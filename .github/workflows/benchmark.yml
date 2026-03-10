@@ -41,6 +41,8 @@ jobs:
 
       - name: Compare benchmarks
         id: bench
+        env:
+          GOTOOLCHAIN: auto
         run: |
           go run golang.org/x/perf/cmd/benchstat@latest before after | tee diff
           printf 'diff<<EOF\n%s\nEOF\n' "$(cat diff)" >> $GITHUB_OUTPUT
