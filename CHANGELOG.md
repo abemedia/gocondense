@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/abemedia/gocondense/compare/v0.1.2...v0.2.0) (2026-03-10)
+
+
+### Features
+
+* remove blank lines after assignment operators ([#81](https://github.com/abemedia/gocondense/issues/81)) ([70b582d](https://github.com/abemedia/gocondense/commit/70b582df6d81ebc025feab4dd69e46ae2c09ef3c))
+
+
+### Bug Fixes
+
+* compare param names when merging func-type params, support struct-type ([#76](https://github.com/abemedia/gocondense/issues/76)) ([da96fad](https://github.com/abemedia/gocondense/commit/da96fad40ef2a5ea3998f95519e753bcd2547de4))
+
 ## [0.1.2](https://github.com/abemedia/gocondense/compare/v0.1.1...v0.1.2) (2026-03-08)
 
 
