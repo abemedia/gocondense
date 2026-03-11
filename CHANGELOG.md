@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/abemedia/gocondense/compare/v0.2.0...v0.3.0) (2026-03-11)
+
+
+### Features
+
+* **cli:** support go.mod ignore directives, skip hidden files, format direct non-go args ([#84](https://github.com/abemedia/gocondense/issues/84)) ([a053fd4](https://github.com/abemedia/gocondense/commit/a053fd4d6041a2b08dfe0c11efb36c78950c6170))
+* trim blank lines in declaration groups, remove empty declarations, consolidate tests ([#86](https://github.com/abemedia/gocondense/issues/86)) ([a06e26b](https://github.com/abemedia/gocondense/commit/a06e26b3831fe06fe35680047faaa517f660dd19))
+
 ## [0.2.0](https://github.com/abemedia/gocondense/compare/v0.1.2...v0.2.0) (2026-03-10)
 
 
