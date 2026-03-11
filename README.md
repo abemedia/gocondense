@@ -282,40 +282,18 @@ result := (a + b) * c // kept
 
 </details>
 
-<details><summary><b>Trim leading and trailing empty lines inside blocks</b></summary>
+<details><summary><b>Trim leading and trailing blank lines</b></summary>
 
-Leading and trailing empty lines are removed from function bodies, case clauses,
-slice/map/struct literals, and struct/interface definitions.
+Leading and trailing blank lines are removed from all delimited constructs,
+including function bodies, case clauses, composite literals, struct and
+interface definitions, parameter lists, and declaration groups.
+
+Function bodies:
 
 ```go
 func foo() {
 
     bar()
-
-}
-
-switch {
-case true:
-
-    x := 1
-
-}
-
-_ = map[string]int{
-
-    "a": 1,
-
-}
-
-type S struct {
-
-    A int
-
-}
-
-type I interface {
-
-    Foo()
 
 }
 ```
@@ -324,22 +302,39 @@ type I interface {
 func foo() {
     bar()
 }
+```
 
+Case clauses:
+
+```go
+switch {
+case true:
+
+    x := 1
+
+}
+```
+
+```go
 switch {
 case true:
     x := 1
 }
+```
 
+Composite literals:
+
+```go
+_ = map[string]int{
+
+    "a": 1,
+
+}
+```
+
+```go
 _ = map[string]int{
     "a": 1,
-}
-
-type S struct {
-    A int
-}
-
-type I interface {
-    Foo()
 }
 ```
 
