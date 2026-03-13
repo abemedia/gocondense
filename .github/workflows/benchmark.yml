@@ -48,7 +48,7 @@ jobs:
           printf 'diff<<EOF\n%s\nEOF\n' "$(cat diff)" >> $GITHUB_OUTPUT
 
       - name: Create comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: benchmarks
           message: |
