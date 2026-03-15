@@ -491,7 +491,7 @@ func mergeFields(list *ast.FieldList) {
 }
 
 // equalExpr reports whether two AST type expressions are structurally equal.
-func equalExpr(a, b ast.Expr) bool { //nolint:cyclop
+func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,gocognit
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -535,6 +535,15 @@ func equalExpr(a, b ast.Expr) bool { //nolint:cyclop
 	case *ast.StructType:
 		y, ok := b.(*ast.StructType)
 		return ok && equalFieldList(x.Fields, y.Fields)
+	case *ast.ParenExpr:
+		y, ok := b.(*ast.ParenExpr)
+		return ok && equalExpr(x.X, y.X)
+	case *ast.UnaryExpr:
+		y, ok := b.(*ast.UnaryExpr)
+		return ok && x.Op == y.Op && equalExpr(x.X, y.X)
+	case *ast.BinaryExpr:
+		y, ok := b.(*ast.BinaryExpr)
+		return ok && x.Op == y.Op && equalExpr(x.X, y.X) && equalExpr(x.Y, y.Y)
 	default:
 		return false
 	}
