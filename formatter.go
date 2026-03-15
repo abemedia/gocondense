@@ -2,7 +2,6 @@ package gocondense
 
 import (
 	"bytes"
-	"cmp"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -23,44 +22,44 @@ type Config struct {
 	// when calculating line lengths.
 	// If 0, defaults to 4 spaces.
 	TabWidth int
-
-	// SkipGenerated causes Format to return the source unchanged for
-	// files that contain a "Code generated ... DO NOT EDIT" comment.
-	SkipGenerated bool
 }
 
 var (
-	defaultConfig    = &Config{MaxLen: 80, TabWidth: 4}
+	defaultConfig    = Config{MaxLen: 80, TabWidth: 4}
 	defaultFormatter = New(defaultConfig)
 )
 
-// Format formats Go source code using the default configuration.
+// Source formats Go source code using the default configuration.
 // Returns the formatted source code or an error if parsing fails.
-func Format(src []byte) ([]byte, error) {
-	return defaultFormatter.Format(src)
+func Source(src []byte) ([]byte, error) {
+	return defaultFormatter.Source(src)
 }
 
 // Formatter condenses Go code according to the specified configuration.
 type Formatter struct {
-	config *Config
+	config Config
 }
 
 // New creates a new formatter with the given configuration.
-// If config is nil, the default configuration is used.
-func New(config *Config) *Formatter {
-	if config == nil {
-		config = defaultConfig
-	} else if config.MaxLen < 0 || config.TabWidth < 0 {
+// Zero fields are replaced with their [Config] defaults.
+func New(config Config) *Formatter {
+	if config.MaxLen < 0 || config.TabWidth < 0 {
 		panic("gocondense: MaxLen and TabWidth must not be negative")
+	}
+	if config.MaxLen == 0 {
+		config.MaxLen = defaultConfig.MaxLen
+	}
+	if config.TabWidth == 0 {
+		config.TabWidth = defaultConfig.TabWidth
 	}
 	return &Formatter{config: config}
 }
 
-// Format processes Go source code and returns a condensed version.
+// Source processes Go source code and returns a condensed version.
 // The formatter respects the configured limits, only condensing constructs
 // that fit within the specified constraints.
 // Returns the formatted source code or an error if parsing or formatting fails.
-func (f *Formatter) Format(src []byte) ([]byte, error) {
+func (f *Formatter) Source(src []byte) ([]byte, error) {
 	fset := token.NewFileSet()
 
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments|parser.SkipObjectResolution)
@@ -68,26 +67,28 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to parse source: %w", err)
 	}
 
-	if f.config.SkipGenerated && ast.IsGenerated(file) {
-		return src, nil
+	f.File(fset, file)
+
+	buf := bytes.NewBuffer(make([]byte, 0, len(src)))
+	if err := format.Node(buf, fset, file); err != nil {
+		return nil, fmt.Errorf("failed to format AST: %w", err)
 	}
 
+	return buf.Bytes(), nil
+}
+
+// File condenses the given AST file in-place. The caller is responsible for
+// parsing and for rendering the result (e.g. via format.Node).
+func (f *Formatter) File(fset *token.FileSet, file *ast.File) {
 	c := &condenser{
-		maxLen:    cmp.Or(f.config.MaxLen, defaultConfig.MaxLen),
-		tabWidth:  cmp.Or(f.config.TabWidth, defaultConfig.TabWidth),
+		maxLen:    f.config.MaxLen,
+		tabWidth:  f.config.TabWidth,
 		fset:      fset,
 		file:      file,
 		tokenFile: fset.File(file.Pos()),
-		buf:       bytes.NewBuffer(make([]byte, 0, len(src))),
+		buf:       bytes.NewBuffer(make([]byte, 0, 4096)),
 		parents:   make([]ast.Node, 0, 32),
 	}
 
 	astutil.Apply(file, c.applyPre, c.applyPost)
-
-	c.buf.Reset()
-	if err := format.Node(c.buf, fset, file); err != nil {
-		return nil, fmt.Errorf("failed to format AST: %w", err)
-	}
-
-	return c.buf.Bytes(), nil
 }

@@ -4,13 +4,13 @@
 //
 // Format a source file with default settings (80 columns, 4-wide tabs):
 //
-//	formatted, err := gocondense.Format(src)
+//	formatted, err := gocondense.Source(src)
 //
 // Use a custom configuration:
 //
-//	f := gocondense.New(&gocondense.Config{
+//	f := gocondense.New(gocondense.Config{
 //		MaxLen:   120,
 //		TabWidth: 2,
 //	})
-//	formatted, err := f.Format(src)
+//	formatted, err := f.Source(src)
 package gocondense

@@ -47,10 +47,11 @@ linters:
           disabled: true # covered by perfsprint
         - name: enforce-switch-style
           disabled: true
+        - name: flag-parameter
+          disabled: true
     nolintlint:
       require-specific: true
   exclusions:
-    generated: lax
     presets:
       - common-false-positives
       - legacy
@@ -66,6 +67,7 @@ linters:
         text: 'shadow: declaration of "err" shadows declaration'
     paths:
       - testdata
+      - cmd/gocondense/internal.go
 
 formatters:
   enable:
