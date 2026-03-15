@@ -251,7 +251,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 	}
 
 	// Save line table and field names so both can be reverted atomically.
-	savedLines := slices.Clone(e.tokenFile.Lines())
+	savedLines := e.saveLines(startLine, endLine)
 	savedFields := slices.Clone(list.List)
 	savedNames := make([][]*ast.Ident, len(list.List))
 	for i, f := range list.List {
@@ -264,7 +264,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 	// format.Node can't render a standalone FieldList, so verify against
 	// the parent node which IS renderable.
 	if !e.canCondense(e.parent(1)) {
-		e.tokenFile.SetLines(savedLines)
+		e.restoreLines(startLine, startLine, savedLines)
 		list.List = savedFields
 		for i, f := range savedFields {
 			f.Names = savedNames[i]
@@ -376,13 +376,17 @@ func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
 		return
 	}
 
-	saved := slices.Clone(e.tokenFile.Lines())
+	startLine, endLine := e.line(call.Lparen), e.line(call.Rparen)
+	argStartLine, argEndLine := e.line(lastArg.Pos()), e.line(lastArg.End())
 
-	e.removeLines(e.line(call.Lparen), e.line(lastArg.Pos()))
-	e.removeLines(e.line(lastArg.End()), e.line(call.Rparen))
+	saved := e.saveLines(startLine, endLine)
+
+	// Remove from the end first to keep earlier line numbers stable.
+	e.removeLines(argEndLine, endLine)
+	e.removeLines(startLine, argStartLine)
 
 	if !e.canCondense(call) {
-		e.tokenFile.SetLines(saved)
+		e.restoreLines(startLine, startLine+(argEndLine-argStartLine), saved)
 	}
 }
 
@@ -406,14 +410,12 @@ func trim[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	endLine := e.line(end)
 	lastLine := e.line(last)
 	if endLine > lastLine+1 {
-		trailing := 0
-		for l := endLine - 1; l > lastLine; l-- {
-			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-				break
-			}
-			trailing++
+		from, to := e.tokenFile.LineStart(lastLine+1), e.tokenFile.LineStart(endLine)-1
+		i := sort.Search(len(e.file.Comments), func(i int) bool { return e.file.Comments[i].Pos() > to }) - 1
+		if i >= 0 && e.file.Comments[i].End() >= from {
+			lastLine = e.line(e.file.Comments[i].End())
 		}
-		e.removeLines(endLine-trailing-1, endLine-1)
+		e.removeLines(lastLine, endLine-1)
 	}
 }
 
@@ -429,14 +431,12 @@ func trimTop[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	startLine := e.line(start)
 	firstLine := e.line(first)
 	if firstLine > startLine+1 {
-		leading := 0
-		for l := startLine + 1; l < firstLine; l++ {
-			if e.hasCommentsInRange(e.tokenFile.LineStart(l), e.tokenFile.LineStart(l+1)-1) {
-				break
-			}
-			leading++
+		from, to := e.tokenFile.LineStart(startLine+1), e.tokenFile.LineStart(firstLine)-1
+		i := sort.Search(len(e.file.Comments), func(i int) bool { return e.file.Comments[i].End() >= from })
+		if i < len(e.file.Comments) && e.file.Comments[i].Pos() <= to {
+			firstLine = e.line(e.file.Comments[i].Pos())
 		}
-		e.removeLines(startLine, startLine+leading)
+		e.removeLines(startLine, firstLine-1)
 	}
 }
 
@@ -494,9 +494,7 @@ func isBlankIdent(expr ast.Expr) bool {
 // group ending at or after start, then checks if that group begins before end.
 func (e *condenser) hasCommentsInRange(start, end token.Pos) bool {
 	comments := e.file.Comments
-	i := sort.Search(len(comments), func(i int) bool {
-		return comments[i].End() >= start
-	})
+	i := sort.Search(len(comments), func(i int) bool { return comments[i].End() >= start })
 	return i < len(comments) && comments[i].Pos() <= end
 }
 
@@ -523,13 +521,24 @@ func (e *condenser) line(pos token.Pos) int {
 	return e.tokenFile.Line(pos)
 }
 
+// saveLines returns a copy of the line table entries in [from, to).
+func (e *condenser) saveLines(from, to int) []int {
+	return slices.Clone(e.tokenFile.Lines()[from:to])
+}
+
+// restoreLines replaces the line table entries in [from, to) with saved.
+func (e *condenser) restoreLines(from, to int, saved []int) {
+	e.tokenFile.SetLines(slices.Replace(e.tokenFile.Lines(), from, to, saved...))
+}
+
 // removeLines removes all newlines between two line numbers, so that they end
 // up on the same line.
 func (e *condenser) removeLines(fromLine, toLine int) {
-	for fromLine < toLine {
-		e.tokenFile.MergeLine(fromLine)
-		toLine--
+	if fromLine >= toLine {
+		return
 	}
+	lines := e.tokenFile.Lines()
+	e.tokenFile.SetLines(append(lines[:fromLine], lines[toLine:]...))
 }
 
 // canCondense checks whether the rendered node fits within MaxLen.
@@ -586,11 +595,17 @@ func (e *condenser) startColumn(pos token.Pos) int {
 // condenseNode attempts to condense a node by removing lines between its positions.
 // If the condensed result would exceed MaxLen, the line table is restored.
 func (e *condenser) condenseNode(node ast.Node) {
-	lines := slices.Clone(e.tokenFile.Lines())
-	e.removeLines(e.line(node.Pos()), e.line(node.End()))
+	from := e.line(node.Pos())
+	to := e.line(node.End())
+	if from >= to {
+		return
+	}
+
+	saved := e.saveLines(from, to)
+	e.removeLines(from, to)
 
 	if !e.canCondense(node) {
-		e.tokenFile.SetLines(lines)
+		e.restoreLines(from, from, saved)
 	}
 }
 
