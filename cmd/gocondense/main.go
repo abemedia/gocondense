@@ -8,6 +8,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	goformat "go/format"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"io"
 	"io/fs"
 	"os"
@@ -23,6 +28,19 @@ import (
 	"github.com/abemedia/gocondense"
 )
 
+const (
+	parserMode = parser.ParseComments | parser.SkipObjectResolution
+
+	// normalizeNumbers is an unexported printer mode that canonicalises
+	// number-literal prefixes and exponents (1 << 30 since Go 1.13).
+	// TestNormalizeNumbers guards against this value changing.
+	normalizeNumbers = 1 << 30
+
+	printerMode = printer.UseSpaces | printer.TabIndent | normalizeNumbers
+)
+
+var printCfg = printer.Config{Mode: printerMode, Tabwidth: 8}
+
 func main() {
 	os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr))
 }
@@ -32,9 +50,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
-	maxLen := flags.Int("max-len", 80, "Maximum line length before keeping multi-line")
-	tabWidth := flags.Int("tab-width", 4, "Width of a tab character for line length calculation")
-	help := flags.Bool("help", false, "Show help message")
+	maxLen := flags.Int("max-len", 80, "maximum line length before keeping multi-line")
+	tabWidth := flags.Int("tab-width", 4, "width of a tab character for line length calculation")
 
 	flags.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: %s [options] [file|dir|path/...]", args[0])
@@ -45,12 +62,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
-	}
-
-	if *help {
-		flags.Usage()
-		return 0
 	}
 
 	if *maxLen < 0 || *tabWidth < 0 {
@@ -59,45 +74,54 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	cfg := &gocondense.Config{
+	formatter := gocondense.New(gocondense.Config{
 		MaxLen:   *maxLen,
 		TabWidth: *tabWidth,
-	}
+	})
 
 	if flags.NArg() == 0 {
-		return formatStdin(cfg, stdin, stdout, stderr)
+		return formatStdin(formatter, stdin, stdout, stderr)
 	}
-	return processArgs(cfg, flags.Args(), stderr)
+	return processArgs(formatter, flags.Args(), stderr)
 }
 
 // formatStdin reads Go source from stdin, formats it, and writes to stdout.
-func formatStdin(cfg *gocondense.Config, stdin io.Reader, stdout, stderr io.Writer) int {
+func formatStdin(formatter *gocondense.Formatter, stdin io.Reader, stdout, stderr io.Writer) int {
 	input, err := io.ReadAll(stdin)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error reading from stdin: %v\n", err)
+		fmt.Fprintf(stderr, "Error reading stdin: %v\n", err)
 		return 2
 	}
-	output, err := gocondense.New(cfg).Format(input)
+
+	fset := token.NewFileSet()
+	file, sourceAdj, indentAdj, err := parse(fset, "<standard input>", input, true)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error formatting code: %v\n", err)
+		fmt.Fprintf(stderr, "Error parsing stdin: %v\n", err)
 		return 2
 	}
+
+	formatter.File(fset, file)
+
+	if sourceAdj == nil {
+		// Complete file (not fragment) - sort imports as a final step.
+		ast.SortImports(fset, file)
+	}
+
+	output, err := format(fset, file, sourceAdj, indentAdj, input, printCfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error formatting stdin: %v\n", err)
+		return 2
+	}
+
 	if _, err := stdout.Write(output); err != nil {
-		fmt.Fprintf(stderr, "Error writing to stdout: %v\n", err)
+		fmt.Fprintf(stderr, "Error writing stdout: %v\n", err)
 		return 2
 	}
 	return 0
 }
 
 // processArgs formats the given file and directory arguments concurrently.
-func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
-	formatter := gocondense.New(cfg)
-
-	// For directory walks, skip generated files automatically.
-	dirCfg := *cfg
-	dirCfg.SkipGenerated = true
-	dirFormatter := gocondense.New(&dirCfg)
-
+func processArgs(formatter *gocondense.Formatter, args []string, stderr io.Writer) int {
 	var (
 		wg        sync.WaitGroup
 		hasErrors atomic.Bool
@@ -117,10 +141,8 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 			continue
 		}
 
-		f := formatter
-		if info.IsDir() {
-			f = dirFormatter
-		}
+		// Skip generated files automatically for directory walks.
+		skipGenerated := info.IsDir()
 
 		err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			switch {
@@ -136,7 +158,7 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 				go func() {
 					defer sem.Release(1)
 					defer wg.Done()
-					if !processFile(f, p, stderr) {
+					if !processFile(formatter, p, skipGenerated, stderr) {
 						hasErrors.Store(true)
 					}
 				}()
@@ -144,7 +166,7 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 			return nil
 		})
 		if err != nil {
-			fmt.Fprintf(stderr, "Error walking path %s: %v\n", root, err)
+			fmt.Fprintf(stderr, "Error reading path %s: %v\n", root, err)
 			hasErrors.Store(true)
 		}
 	}
@@ -156,18 +178,32 @@ func processArgs(cfg *gocondense.Config, args []string, stderr io.Writer) int {
 }
 
 // processFile reads, formats, and writes back a single Go file.
-func processFile(formatter *gocondense.Formatter, filename string, stderr io.Writer) bool {
+func processFile(formatter *gocondense.Formatter, filename string, skipGenerated bool, stderr io.Writer) bool {
 	input, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error reading file %s: %v\n", filename, err)
 		return false
 	}
 
-	output, err := formatter.Format(input)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, input, parserMode)
 	if err != nil {
+		fmt.Fprintf(stderr, "Error parsing file %s: %v\n", filename, err)
+		return false
+	}
+
+	if skipGenerated && ast.IsGenerated(file) {
+		return true
+	}
+
+	formatter.File(fset, file)
+
+	var buf bytes.Buffer
+	if err := goformat.Node(&buf, fset, file); err != nil {
 		fmt.Fprintf(stderr, "Error formatting file %s: %v\n", filename, err)
 		return false
 	}
+	output := buf.Bytes()
 
 	if bytes.Equal(input, output) {
 		return true
