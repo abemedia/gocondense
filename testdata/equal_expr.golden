@@ -56,3 +56,12 @@ func ellipsis(a, b func(...int)) {}
 
 // structType: *ast.StructType
 func structType(a, b struct{ X int }) {}
+
+// parenExpr: *ast.ParenExpr
+func parenExpr(a, b <-chan int) {}
+
+// unaryExpr: *ast.UnaryExpr (tilde in type constraint)
+func unaryExpr[A, B ~int]() {}
+
+// binaryExpr: *ast.BinaryExpr (union in type constraint)
+func binaryExpr[A, B int | string]() {}

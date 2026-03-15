@@ -124,3 +124,24 @@ func structType(
 	b struct{ X int },
 ) {
 }
+
+// parenExpr: *ast.ParenExpr
+func parenExpr(
+	a (<-chan int),
+	b (<-chan int),
+) {
+}
+
+// unaryExpr: *ast.UnaryExpr (tilde in type constraint)
+func unaryExpr[
+	A ~int,
+	B ~int,
+]() {
+}
+
+// binaryExpr: *ast.BinaryExpr (union in type constraint)
+func binaryExpr[
+	A int | string,
+	B int | string,
+]() {
+}
