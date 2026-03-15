@@ -1,0 +1,42 @@
+package main
+
+// Remove redundant zero low bound and redundant high bound.
+func sliceExprZeroLow() {
+	s := []int{1, 2, 3}
+	_ = s[0:len(s)]
+}
+
+// Remove redundant high bound.
+func sliceExprSimplify() {
+	s := []int{1, 2, 3}
+	_ = s[1:len(s)]
+}
+
+// Remove redundant zero low bound.
+func sliceExprZeroLowOnly() {
+	s := []int{1, 2, 3}
+	_ = s[0:]
+}
+
+// Keep zero low bound when high bound is explicit.
+func sliceExprZeroLowExplicitHigh() {
+	s := []int{1, 2, 3}
+	_ = s[0:2]
+}
+
+// Leave 3-index slices alone.
+func sliceExpr3Index() {
+	s := []int{1, 2, 3}
+	_ = s[0:len(s):cap(s)]
+}
+
+// Leave function call bounds alone.
+func sliceExprCall() {
+	_ = getSlice()[0:len(getSlice())]
+}
+
+// Leave channel receive bounds alone.
+func sliceExprChanRecv() {
+	var ch chan []int
+	_ = (<-ch)[0:len(<-ch)]
+}
