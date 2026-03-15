@@ -131,7 +131,7 @@ func (e *condenser) simplifyGenDecl(decl *ast.GenDecl) bool {
 // Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool {
 	switch paren.X.(type) {
 	case *ast.ChanType, *ast.FuncType:
 		return false
@@ -141,22 +141,24 @@ func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
 			return false
 		}
 	case *ast.BinaryExpr, *ast.UnaryExpr:
+		ok := false
 		switch p := e.parent(1).(type) {
 		case *ast.AssignStmt:
-			return len(p.Rhs) == 1
+			ok = len(p.Rhs) == 1
 		case *ast.ValueSpec:
-			return len(p.Values) == 1
+			ok = len(p.Values) == 1
 		case *ast.ReturnStmt:
-			return len(p.Results) == 1
+			ok = len(p.Results) == 1
 		case *ast.CaseClause:
-			return len(p.List) == 1
+			ok = len(p.List) == 1
 		case *ast.CompositeLit:
-			return len(p.Elts) == 1
+			ok = len(p.Elts) == 1
 		case *ast.KeyValueExpr:
-			return p.Key != paren
+			ok = p.Key != paren
 		case *ast.ExprStmt, *ast.ParenExpr:
-			return true
-		default:
+			ok = true
+		}
+		if !ok {
 			return false
 		}
 	}
@@ -166,30 +168,41 @@ func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
 		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncDecl, *ast.FuncLit, *ast.ParenExpr:
 			return true
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt:
-			for expr := paren.X; ; {
-				switch e := expr.(type) {
-				case *ast.SelectorExpr:
-					expr = e.X
-				case *ast.CallExpr:
-					expr = e.Fun
-				case *ast.IndexExpr:
-					expr = e.X
-				case *ast.SliceExpr:
-					expr = e.X
-				case *ast.TypeAssertExpr:
-					expr = e.X
-				case *ast.StarExpr:
-					expr = e.X
-				case *ast.CompositeLit:
-					return false
-				default:
-					return true
-				}
-			}
+			return !hasExposedCompositeLit(paren.X)
 		}
 	}
 
 	return true
+}
+
+// hasExposedCompositeLit reports whether expr contains a composite literal
+// reachable without crossing delimiter boundaries (parens, brackets, braces).
+func hasExposedCompositeLit(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.SelectorExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.CallExpr:
+		return hasExposedCompositeLit(e.Fun)
+	case *ast.IndexExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.SliceExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.TypeAssertExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.StarExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.UnaryExpr:
+		return hasExposedCompositeLit(e.X)
+	case *ast.BinaryExpr:
+		return hasExposedCompositeLit(e.X) || hasExposedCompositeLit(e.Y)
+	case *ast.Ident, *ast.BasicLit, *ast.ParenExpr, *ast.FuncLit,
+		*ast.ArrayType, *ast.MapType, *ast.ChanType, *ast.FuncType,
+		*ast.StructType, *ast.InterfaceType, *ast.IndexListExpr,
+		*ast.Ellipsis, *ast.KeyValueExpr:
+		return false
+	default:
+		return true // CompositeLit and unknown types conservatively keep parens.
+	}
 }
 
 // condenseFieldList trims blank lines in a field list and, for type params
