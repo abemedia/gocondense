@@ -64,12 +64,18 @@ func main() {
 	if (x[T{}:]) {
 	}
 
+	// Composite literal in unary/binary expr inside control flow init
+	if x := (&T{}); x.i == 0 {
+	}
+	if x := (-T{}.i); x == 0 {
+	}
+	if x := (T{}.i + 1); x == 0 {
+	}
+
 	// Control flow headers without composite literals
 	if (x.(T)) {
 	}
 	if (*x) {
-	}
-	if (func() bool { return true }()) {
 	}
 	if (x) == 0 {
 	}
