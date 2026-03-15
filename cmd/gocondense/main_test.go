@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"cmp"
 	"errors"
+	goformat "go/format"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"io"
 	"os"
 	"path"
@@ -107,23 +111,38 @@ func TestRun(t *testing.T) {
 			wantStdout: condensed,
 		},
 		{
-			name:       "invalid_go_stdin",
-			stdin:      strings.NewReader("not valid go"),
-			wantCode:   2,
-			wantStderr: "Error formatting code:",
+			name:       "stdin_empty",
+			stdin:      strings.NewReader(""),
+			wantStdout: "",
+		},
+		{
+			name:       "stdin_whitespace",
+			stdin:      strings.NewReader("  \n\t\n  "),
+			wantStdout: "  \n\t\n  ",
+		},
+		{
+			name:       "stdin_fragment",
+			stdin:      strings.NewReader("\t\tvar (\n\t\t\tx = 1\n\t\t)\n"),
+			wantStdout: "\t\tvar x = 1\n",
 		},
 		{
 			name:       "stdin_read_error",
 			stdin:      iotest.ErrReader(errTest),
 			wantCode:   2,
-			wantStderr: "Error reading from stdin:",
+			wantStderr: "Error reading stdin:",
+		},
+		{
+			name:       "invalid_go_stdin",
+			stdin:      strings.NewReader("not valid go"),
+			wantCode:   2,
+			wantStderr: "Error parsing stdin:",
 		},
 		{
 			name:       "stdout_write_error",
 			stdin:      strings.NewReader(uncondensed),
 			stdout:     errWriter{},
 			wantCode:   2,
-			wantStderr: "Error writing to stdout:",
+			wantStderr: "Error writing stdout:",
 		},
 		// Files
 		{
@@ -143,7 +162,7 @@ func TestRun(t *testing.T) {
 			args:       []string{"bad.go"},
 			files:      map[string]string{"bad.go": "not valid go"},
 			wantCode:   2,
-			wantStderr: "Error formatting file",
+			wantStderr: "Error parsing file",
 		},
 		{
 			name:       "non_existent_path",
@@ -290,5 +309,33 @@ func TestRun(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestNormalizeNumbers verifies that our hardcoded normalizeNumbers constant
+// matches the stdlib's behavior by formatting a non-canonical number literal
+// and comparing the output with go/format.Source.
+func TestNormalizeNumbers(t *testing.T) {
+	src := []byte("package p\n\nconst x = 0XFF\n")
+
+	want, err := goformat.Source(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", src, parserMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	cfg := printer.Config{Mode: printerMode, Tabwidth: 8}
+	if err := cfg.Fprint(&buf, fset, f); err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Errorf("normalizeNumbers constant mismatch:\ngot:  %s\nwant: %s", buf.Bytes(), want)
 	}
 }

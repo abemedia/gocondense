@@ -3,6 +3,8 @@ package gocondense_test
 import (
 	"cmp"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"slices"
 	"strings"
 	"testing"
@@ -10,18 +12,22 @@ import (
 	"github.com/abemedia/gocondense"
 )
 
-func BenchmarkFormat(b *testing.B) {
+func BenchmarkFile(b *testing.B) {
+	formatter := gocondense.New(gocondense.Config{})
 	for _, n := range []int{100, 1000} {
 		src, lines := generateSrc(n)
 		b.Run(fmt.Sprintf("%d_LOC", lines), func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(src)))
 			for b.Loop() {
-				out, err := gocondense.Format(src)
+				b.StopTimer()
+				fset := token.NewFileSet()
+				file, err := parser.ParseFile(fset, "", src, parser.ParseComments|parser.SkipObjectResolution)
 				if err != nil {
 					b.Fatal(err)
 				}
-				_ = out
+				b.StartTimer()
+				formatter.File(fset, file)
 			}
 		})
 	}
