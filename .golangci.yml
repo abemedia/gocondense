@@ -30,6 +30,23 @@ linters:
     govet:
       enable-all: true
       disable: [fieldalignment]
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: line-length-limit
+          disabled: true # covered by lll
+        - name: function-length
+          disabled: true # covered by funlen
+        - name: cognitive-complexity
+          disabled: true # covered by gocognit
+        - name: cyclomatic
+          disabled: true # covered by cyclop
+        - name: add-constant
+          disabled: true # covered by goconst/mnd
+        - name: unnecessary-format
+          disabled: true # covered by perfsprint
+        - name: enforce-switch-style
+          disabled: true
     nolintlint:
       require-specific: true
   exclusions:
