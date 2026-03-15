@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,gocognit
 	node := c.Node()
 	if node == nil {
 		return true
@@ -69,6 +69,14 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CommClause:
 		trimTop(e, n.Colon, n.End(), n.Body)
+	case *ast.UnaryExpr:
+		if inner, ok := n.X.(*ast.CompositeLit); ok && n.Op == token.AND {
+			expected, ok := e.litElementType(n).(*ast.StarExpr)
+			if ok && equalExpr(inner.Type, expected.X) {
+				inner.Type = nil
+				c.Replace(inner)
+			}
+		}
 	case *ast.CompositeLit:
 		e.condenseCompositeLit(n)
 	case *ast.CallExpr:
@@ -86,6 +94,10 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 			!slices.ContainsFunc(n.Indices, func(idx ast.Expr) bool { return !e.isSingleLine(idx) }) {
 			e.condenseNode(n)
 		}
+	case *ast.SliceExpr:
+		simplifySliceExpr(n)
+	case *ast.RangeStmt:
+		simplifyRangeStmt(n)
 	case *ast.AssignStmt:
 		if !e.hasCommentsInRange(n.TokPos, n.Rhs[0].Pos()) {
 			e.removeLines(e.line(n.TokPos), e.line(n.Rhs[0].Pos()))
@@ -260,11 +272,29 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 	}
 }
 
-// condenseCompositeLit trims blank lines and attempts to collapse multi-line
-// composite literals onto a single line. Literals with multi-line types are
-// not collapsed. Key-value literals (structs/maps) are only condensed when
-// the first element shares a line with the opening brace.
+// mergeFields merges adjacent fields with the same type (e.g. `a T, b T` → `a, b T`).
+func mergeFields(list *ast.FieldList) {
+	for i := len(list.List) - 1; i > 0; i-- {
+		a, b := list.List[i-1], list.List[i]
+		if len(a.Names) > 0 && len(b.Names) > 0 && equalExpr(a.Type, b.Type) {
+			a.Names = append(a.Names, b.Names...)
+			list.List = slices.Delete(list.List, i, i+1)
+		}
+	}
+}
+
+// condenseCompositeLit elides redundant element types, trims blank lines, and
+// attempts to collapse multi-line composite literals onto a single line.
+// Literals with multi-line types are not collapsed. Key-value literals
+// (structs/maps) are only condensed when the first element shares a line with
+// the opening brace.
 func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
+	if lit.Type != nil {
+		if expected := e.litElementType(lit); equalExpr(expected, lit.Type) {
+			lit.Type = nil
+		}
+	}
+
 	trim(e, lit.Lbrace, lit.Rbrace, lit.Elts)
 	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
@@ -288,6 +318,31 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 	}
 
 	e.condenseNode(lit)
+}
+
+// litElementType returns the type that a parent array, slice, or map composite
+// literal expects for this element, or nil if not applicable.
+func (e *condenser) litElementType(node ast.Node) ast.Expr {
+	parent := e.parent(1)
+	kv, isKV := parent.(*ast.KeyValueExpr)
+	if isKV {
+		parent = e.parent(2)
+	}
+	outer, ok := parent.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	switch typ := outer.Type.(type) {
+	case *ast.ArrayType:
+		return typ.Elt
+	case *ast.MapType:
+		if isKV && kv.Key == node {
+			return typ.Key
+		}
+		return typ.Value
+	default:
+		return nil
+	}
 }
 
 // condenseCallExpr handles condensing of function call expressions.
@@ -385,6 +440,55 @@ func trimTop[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	}
 }
 
+// simplifySliceExpr removes redundant len calls from 2-index slice upper
+// bounds and strips zero low bounds when the high bound is omitted.
+func simplifySliceExpr(expr *ast.SliceExpr) {
+	if expr.Max != nil {
+		return
+	}
+	// Remove redundant len() upper bound, skipping expressions with side
+	// effects as the simplification reduces evaluation from twice to once.
+	if call, ok := expr.High.(*ast.CallExpr); ok && len(call.Args) == 1 {
+		if fn, ok := call.Fun.(*ast.Ident); ok && fn.Name == "len" {
+			safe := true
+			ast.Inspect(expr.X, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.CallExpr:
+					safe = false
+				case *ast.UnaryExpr:
+					safe = n.Op != token.ARROW
+				}
+				return safe
+			})
+			if safe && equalExpr(call.Args[0], expr.X) {
+				expr.High = nil
+			}
+		}
+	}
+	// Remove redundant zero low bound when high is already omitted.
+	if expr.High == nil {
+		if lit, ok := expr.Low.(*ast.BasicLit); ok && lit.Value == "0" {
+			expr.Low = nil
+		}
+	}
+}
+
+// simplifyRangeStmt removes blank identifiers from range statement variables.
+func simplifyRangeStmt(stmt *ast.RangeStmt) {
+	if isBlankIdent(stmt.Value) {
+		stmt.Value = nil
+	}
+	if stmt.Value == nil && isBlankIdent(stmt.Key) {
+		stmt.Key = nil
+	}
+}
+
+// isBlankIdent reports whether expr is the blank identifier _.
+func isBlankIdent(expr ast.Expr) bool {
+	id, ok := expr.(*ast.Ident)
+	return ok && id.Name == "_"
+}
+
 // hasCommentsInRange reports whether any comment group overlaps [start, end].
 // It uses binary search on the position-sorted comment list to find the first
 // group ending at or after start, then checks if that group begins before end.
@@ -407,8 +511,6 @@ func (e *condenser) isSingleLine(node ast.Node) bool {
 }
 
 // parent returns the nth ancestor from the parent stack (0 = self, 1 = parent, 2 = grandparent).
-//
-//nolint:unparam
 func (e *condenser) parent(n int) ast.Node {
 	if i := len(e.parents) - 1 - n; i >= 0 {
 		return e.parents[i]
@@ -489,17 +591,6 @@ func (e *condenser) condenseNode(node ast.Node) {
 
 	if !e.canCondense(node) {
 		e.tokenFile.SetLines(lines)
-	}
-}
-
-// mergeFields merges adjacent fields with the same type (e.g. `a T, b T` → `a, b T`).
-func mergeFields(list *ast.FieldList) {
-	for i := len(list.List) - 1; i > 0; i-- {
-		a, b := list.List[i-1], list.List[i]
-		if len(a.Names) > 0 && len(b.Names) > 0 && equalExpr(a.Type, b.Type) {
-			a.Names = append(a.Names, b.Names...)
-			list.List = slices.Delete(list.List, i, i+1)
-		}
 	}
 }
 

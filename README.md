@@ -392,6 +392,74 @@ type I interface{}
 
 </details>
 
+<details><summary><b>Elide redundant types in composite literals</b></summary>
+
+Redundant type names in composite literals are removed.
+
+```go
+_ = []T{T{1, 2}, T{3, 4}}
+_ = []*T{&T{1, 2}, &T{3, 4}}
+_ = map[T]T{T{1, 2}: T{3, 4}}
+```
+
+```go
+_ = []T{{1, 2}, {3, 4}}
+_ = []*T{{1, 2}, {3, 4}}
+_ = map[T]T{{1, 2}: {3, 4}}
+```
+
+</details>
+
+<details><summary><b>Remove redundant len calls and zero bounds in slices</b></summary>
+
+Redundant `len` calls and zero low bounds are removed from slice expressions.
+Three-index slices, expressions with side effects, and explicit non-zero bounds
+are left untouched.
+
+```go
+_ = s[1:len(s)]
+_ = s[0:]
+```
+
+```go
+_ = s[1:]
+_ = s[:]
+```
+
+Left untouched:
+
+```go
+_ = s[0:2]              // explicit non-zero high bound
+_ = s[0:len(s):cap(s)]  // three-index slice
+_ = f()[0:len(f())]     // side effects
+```
+
+</details>
+
+<details><summary><b>Remove blank identifiers in range statements</b></summary>
+
+Unnecessary blank identifiers are removed from range statements.
+
+```go
+for i, _ := range s { /* ... */ }
+```
+
+```go
+for i := range s { /* ... */ }
+```
+
+And:
+
+```go
+for _ = range s { /* ... */ }
+```
+
+```go
+for range s { /* ... */ }
+```
+
+</details>
+
 ## Editor Integration
 
 ### VS Code

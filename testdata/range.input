@@ -1,0 +1,28 @@
+package main
+
+// Remove both blank key and value from range.
+func rangeDropBothBlanks() {
+	for _, _ = range []int{1, 2, 3} {
+	}
+}
+
+// Remove blank value from range.
+func rangeDropBlankValue() {
+	for i, _ := range []int{1, 2, 3} {
+		_ = i
+	}
+}
+
+// Remove blank key from range.
+func rangeDropBlankKey() {
+	for _ = range []int{1, 2, 3} {
+	}
+}
+
+// Leave named key and value alone.
+func rangeKeepBoth() {
+	for i, v := range []int{1, 2, 3} {
+		_ = i
+		_ = v
+	}
+}

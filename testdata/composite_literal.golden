@@ -1,0 +1,41 @@
+package main
+
+// Elide inner type from slice literal.
+func slice() {
+	_ = []T{{1, 2}, {3, 4}}
+}
+
+// Elide inner type from array literal.
+func array() {
+	_ = [2]T{{1, 2}, {3, 4}}
+}
+
+// Elide inner type from nested slice literal.
+func nestedSlice() {
+	_ = [][]int{{1, 2}, {3, 4}}
+}
+
+// Elide pointer element type from slice literal.
+func pointerSlice() {
+	_ = []*T{{1, 2}, {3, 4}}
+}
+
+// Elide value type from map literal.
+func mapValue() {
+	_ = map[string]T{"a": {1, 2}, "b": {3, 4}}
+}
+
+// Elide key type from map literal.
+func mapKey() {
+	_ = map[T]string{{1, 2}: "a", {3, 4}: "b"}
+}
+
+// Elide both key and value types from map literal.
+func mapKeyValue() {
+	_ = map[T]T{{1, 2}: {3, 4}}
+}
+
+// Leave different inner type alone.
+func noSimplifyDifferentType() {
+	_ = []T{U{1}}
+}
