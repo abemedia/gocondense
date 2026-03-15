@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/abemedia/gocondense/compare/v0.3.0...v0.4.0) (2026-03-15)
+
+
+### Features
+
+* simplify composite literals, slice expressions and range statements ([#96](https://github.com/abemedia/gocondense/issues/96)) ([17621cc](https://github.com/abemedia/gocondense/commit/17621ccb1415192380734e80de8cf41d1446a0cf))
+
+
+### Bug Fixes
+
+* keep required parens in control-flow headers ([#92](https://github.com/abemedia/gocondense/issues/92)) ([7eb173b](https://github.com/abemedia/gocondense/commit/7eb173b5cea0a4610cbc380cd94bad359b345df0))
+* merge adjacent params with parenthesised, tilde, or union constraint types ([#93](https://github.com/abemedia/gocondense/issues/93)) ([a6b503c](https://github.com/abemedia/gocondense/commit/a6b503ce785218cb375cf60cb10db2d41ab8f6d8))
+
 ## [0.3.0](https://github.com/abemedia/gocondense/compare/v0.2.0...v0.3.0) (2026-03-11)
 
 
