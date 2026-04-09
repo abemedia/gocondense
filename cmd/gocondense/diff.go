@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -22,7 +23,8 @@ func unifiedDiff(filename string, old, cur []byte) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "--- %s\n+++ %s\n", filepath.Join("a", filename), filepath.Join("b", filename))
+	name := filepath.ToSlash(filename)
+	fmt.Fprintf(&b, "--- %s\n+++ %s\n", path.Join("a", name), path.Join("b", name))
 	writeHunks(&b, edits, oldLines, newLines)
 	return b.String()
 }

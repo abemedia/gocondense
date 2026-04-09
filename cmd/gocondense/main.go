@@ -238,11 +238,17 @@ func processFile(
 	}
 
 	if listOnly {
-		fmt.Fprintln(stdout, filename)
+		if _, err := fmt.Fprintln(stdout, filename); err != nil {
+			fmt.Fprintf(stderr, "Error writing output: %v\n", err)
+			return resultError
+		}
 		return resultChanged
 	}
 	if showDiff {
-		fmt.Fprint(stdout, unifiedDiff(filename, input, output))
+		if _, err := fmt.Fprint(stdout, unifiedDiff(filename, input, output)); err != nil {
+			fmt.Fprintf(stderr, "Error writing output: %v\n", err)
+			return resultError
+		}
 		return resultChanged
 	}
 
