@@ -41,9 +41,8 @@ unless explicitly specified as arguments.
 <details><summary><b>Condense function signatures</b></summary>
 
 Multi-line parameter lists, return types, and type parameter lists are condensed
-onto single lines. Each part is condensed independently — for example,
-parameters with comments remain multi-line while return types are still
-condensed.
+onto single lines. Each part is condensed independently. For example, parameters
+with comments remain multi-line while return types are still condensed.
 
 ```go
 func Add[
@@ -180,8 +179,9 @@ p := Person{
 <details><summary><b>Condense expressions</b></summary>
 
 Binary expressions, selector chains, and generic type instantiations that span
-multiple lines are condensed onto a single line, provided both sides of the
-expression are single-line.
+multiple lines are condensed onto a single line. In a mixed-precedence chain,
+the higher-precedence expression is condensed on its own even when the
+surrounding chain stays multi-line.
 
 ```go
 _ = a +
@@ -200,6 +200,21 @@ _ = a + b
 _ = obj.Method
 
 _ = g[int, string](1, "a")
+```
+
+Partial condensing in a mixed-precedence chain:
+
+```go
+_ = a + // keep
+    b*
+        c +
+    d
+```
+
+```go
+_ = a + // keep
+    b*c +
+    d
 ```
 
 </details>
