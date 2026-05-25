@@ -82,8 +82,12 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,g
 	case *ast.CallExpr:
 		e.condenseCallExpr(n)
 	case *ast.BinaryExpr:
-		if !e.isSingleLine(n) && e.isSingleLine(n.X) && e.isSingleLine(n.Y) && !e.hasComments(n) {
-			e.condenseNode(n)
+		// Each precedence-chain collapses atomically from its top; tighter
+		// sub-expressions (e.g. `b*c` in `a + b*c + d`) are their own chain.
+		if p, ok := e.parent(1).(*ast.BinaryExpr); !ok || n.Op.Precedence() > p.Op.Precedence() {
+			if !e.isSingleLine(n) && !e.hasComments(n) {
+				e.condenseNode(n)
+			}
 		}
 	case *ast.SelectorExpr:
 		if !e.isSingleLine(n) && e.isSingleLine(n.X) && !e.hasComments(n) {
