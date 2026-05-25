@@ -577,8 +577,7 @@ func (e *condenser) canCondense(node ast.Node) bool {
 func (e *condenser) startColumn(pos token.Pos) int {
 	line := e.line(pos)
 	var ancestor token.Pos
-	for i := len(e.parents) - 1; i >= 0; i-- {
-		p := e.parents[i]
+	for _, p := range slices.Backward(e.parents) {
 		if e.line(p.Pos()) != line {
 			break
 		}
