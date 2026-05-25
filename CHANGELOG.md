@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/abemedia/gocondense/compare/v0.4.0...v0.4.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* prevent partial collapse of multi-line binary expression chains ([#108](https://github.com/abemedia/gocondense/issues/108)) ([0e78caf](https://github.com/abemedia/gocondense/commit/0e78caf6cbef552378e17925e2e97d12f6a11c63))
+
 ## [0.4.0](https://github.com/abemedia/gocondense/compare/v0.3.0...v0.4.0) (2026-03-15)
 
 
