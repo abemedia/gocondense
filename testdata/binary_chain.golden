@@ -1,0 +1,44 @@
+package main
+
+func main() {
+	// Chain fits - condense
+	_ = shortA + shortB + shortC
+
+	// Chain too long - keep multi-line
+	_ = longVariableNameA +
+		longVariableNameB +
+		longVariableNameC +
+		longVariableNameD
+
+	// Mixed precedence too long - condense the higher-precedence sub-expression
+	_ = longVariableNameA +
+		longVariableNameB*longVariableNameC +
+		longVariableNameD
+
+	// Mixed precedence where sub-expression itself does not fit - keep multi-line
+	_ = longVariableNameA +
+		longVariableNameB*
+			longVariableNameC*
+			longVariableNameE*
+			longVariableNameF*
+			longVariableNameG +
+		longVariableNameD
+
+	// Partial wrap too long when joined - preserve
+	_ = longVariableNameA + longVariableNameB +
+		longVariableNameC + longVariableNameD
+
+	// Paren sub-chain fits - condense even when outer stays multi-line
+	_ = (shortA + shortB) +
+		veryLongVariableNameThatPushesPastTheEightyCharacterLimitOfTheLine
+
+	// Paren sub-chains and outer all fit - join, parens preserved
+	_ = (shortA + shortB) + (shortC + shortD)
+
+	// Paren sub-chain too long - keep multi-line
+	_ = (longVariableNameA +
+		longVariableNameB +
+		longVariableNameC +
+		longVariableNameD) +
+		shortE
+}
