@@ -61,6 +61,7 @@ linters:
           - errcheck
           - funlen
           - gocognit
+          - goconst
           - maintidx
         path: (.+)_test.go
       - linters: [govet]
