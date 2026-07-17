@@ -44,6 +44,21 @@ const (
 	generatedCondensed = generatedPrefix + condensed
 )
 
+var diffOutput = "" +
+	"--- a/a.go\n" +
+	"+++ b/a.go\n" +
+	"@@ -3,9 +3,5 @@\n" +
+	" import \"fmt\"\n" +
+	" \n" +
+	" func greet(first, last string) string {\n" +
+	"-\treturn fmt.Sprintf(\n" +
+	"-\t\t\"Hello, %s %s!\",\n" +
+	"-\t\tfirst,\n" +
+	"-\t\tlast,\n" +
+	"-\t)\n" +
+	"+\treturn fmt.Sprintf(\"Hello, %s %s!\", first, last)\n" +
+	" }\n"
+
 var errTest = errors.New("test error")
 
 type errWriter struct{}
@@ -268,6 +283,96 @@ func TestRun(t *testing.T) {
 			wantFiles: map[string]string{
 				"sub/sub.go": condensed,
 			},
+		},
+		// -l flag
+		{
+			name: "l_lists_changed_files",
+			args: []string{"-l", "a.go", "b.go"},
+			files: map[string]string{
+				"a.go": uncondensed,
+				"b.go": condensed,
+			},
+			wantCode:   1,
+			wantStdout: "a.go\n",
+			wantFiles: map[string]string{
+				"a.go": uncondensed, // not modified
+				"b.go": condensed,   // not modified
+			},
+		},
+		{
+			name: "l_no_changes",
+			args: []string{"-l", "a.go"},
+			files: map[string]string{
+				"a.go": condensed,
+			},
+			wantFiles: map[string]string{
+				"a.go": condensed,
+			},
+		},
+		{
+			name: "l_directory_recursive",
+			args: []string{"-l", "./..."},
+			files: map[string]string{
+				"top.go":     uncondensed,
+				"sub/sub.go": condensed,
+			},
+			wantCode:   1,
+			wantStdout: "top.go\n",
+			wantFiles: map[string]string{
+				"top.go":     uncondensed,
+				"sub/sub.go": condensed,
+			},
+		},
+		{
+			name: "l_skips_generated",
+			args: []string{"-l", "./..."},
+			files: map[string]string{
+				"gen.go": generated,
+				"a.go":   uncondensed,
+			},
+			wantCode:   1,
+			wantStdout: "a.go\n",
+			wantFiles: map[string]string{
+				"gen.go": generated,
+				"a.go":   uncondensed,
+			},
+		},
+		{
+			name:       "l_parse_error",
+			args:       []string{"-l", "bad.go"},
+			files:      map[string]string{"bad.go": "not valid go"},
+			wantCode:   2,
+			wantStderr: "Error parsing file",
+		},
+		// -d flag
+		{
+			name: "d_shows_diff",
+			args: []string{"-d", "a.go"},
+			files: map[string]string{
+				"a.go": uncondensed,
+			},
+			wantCode:   1,
+			wantStdout: diffOutput,
+			wantFiles: map[string]string{
+				"a.go": uncondensed, // not modified
+			},
+		},
+		{
+			name: "d_no_changes",
+			args: []string{"-d", "a.go"},
+			files: map[string]string{
+				"a.go": condensed,
+			},
+			wantFiles: map[string]string{
+				"a.go": condensed,
+			},
+		},
+		{
+			name:       "d_parse_error",
+			args:       []string{"-d", "bad.go"},
+			files:      map[string]string{"bad.go": "not valid go"},
+			wantCode:   2,
+			wantStderr: "Error parsing file",
 		},
 	}
 
