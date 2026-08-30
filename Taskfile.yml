@@ -22,7 +22,11 @@ tasks:
   init:
     desc: Setup git hooks
     cmds:
-      - cp -f scripts/pre-commit.sh .git/hooks/pre-commit
+      - cmd: command -v stagelint || brew install abemedia/tap/stagelint
+        platforms: [darwin, linux]
+      - cmd: command -v stagelint || winget install abemedia.stagelint
+        platforms: [windows]
+      - stagelint init -- --stash untracked
 
   mod:
     desc: Download Go modules
