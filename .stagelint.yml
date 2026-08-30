@@ -1,0 +1,3 @@
+'*.go':
+  command: golangci-lint run --fix --fast-only
+  pass_filenames: false
