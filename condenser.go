@@ -553,21 +553,14 @@ func (e *condenser) canCondense(node ast.Node) bool {
 		panic("gocondense: format.Node failed: " + err.Error())
 	}
 
-	startCol := e.startColumn(node.Pos())
-
-	first := true
-	lines := bytes.SplitSeq(e.buf.Bytes(), []byte{'\n'})
-	for line := range lines {
+	col := e.startColumn(node.Pos())
+	for line := range bytes.SplitSeq(e.buf.Bytes(), []byte{'\n'}) {
 		// Each tab is already counted as 1 byte by len(line), so we add (tabWidth-1)
 		// per tab to get the correct visual width without double-counting.
-		length := len(line) + bytes.Count(line, []byte{'\t'})*(e.tabWidth-1)
-		if first {
-			length += startCol
-			first = false
-		}
-		if length > e.maxLen {
+		if col+len(line)+bytes.Count(line, []byte{'\t'})*(e.tabWidth-1) > e.maxLen {
 			return false // If any line exceeds MaxLen, we cannot condense.
 		}
+		col = 0
 	}
 
 	return true

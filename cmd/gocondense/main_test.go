@@ -6,7 +6,6 @@ import (
 	"errors"
 	goformat "go/format"
 	"go/parser"
-	"go/printer"
 	"go/token"
 	"io"
 	"os"
@@ -361,8 +360,7 @@ func TestNormalizeNumbers(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	cfg := printer.Config{Mode: printerMode, Tabwidth: 8}
-	if err := cfg.Fprint(&buf, fset, f); err != nil {
+	if err := printCfg.Fprint(&buf, fset, f); err != nil {
 		t.Fatal(err)
 	}
 
