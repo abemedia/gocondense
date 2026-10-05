@@ -382,6 +382,9 @@ func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
 
 	startLine, endLine := e.line(call.Lparen), e.line(call.Rparen)
 	argStartLine, argEndLine := e.line(lastArg.Pos()), e.line(lastArg.End())
+	if startLine == argStartLine && argEndLine == endLine {
+		return
+	}
 
 	saved := e.saveLines(startLine, endLine)
 
