@@ -451,7 +451,7 @@ func simplifySliceExpr(expr *ast.SliceExpr) {
 	}
 	// Remove redundant len() upper bound, skipping expressions with side
 	// effects as the simplification reduces evaluation from twice to once.
-	if call, ok := expr.High.(*ast.CallExpr); ok && len(call.Args) == 1 {
+	if call, ok := expr.High.(*ast.CallExpr); ok && len(call.Args) == 1 { //nolint:nestif
 		if fn, ok := call.Fun.(*ast.Ident); ok && fn.Name == "len" {
 			safe := true
 			ast.Inspect(expr.X, func(n ast.Node) bool {
@@ -459,7 +459,9 @@ func simplifySliceExpr(expr *ast.SliceExpr) {
 				case *ast.CallExpr:
 					safe = false
 				case *ast.UnaryExpr:
-					safe = n.Op != token.ARROW
+					if n.Op == token.ARROW {
+						safe = false
+					}
 				}
 				return safe
 			})
