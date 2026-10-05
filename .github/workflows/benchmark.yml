@@ -3,7 +3,7 @@ name: Benchmark
 on:
   pull_request:
     branches: [master]
-    paths: ['**.go']
+    paths: ['*.go', 'go.mod']
 
 permissions:
   contents: read
@@ -29,15 +29,20 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run benchmark
+      - name: Build benchmarks
         run: |
-          go test -run ^$ -bench=. -benchmem -count=${{ env.BENCH_COUNT }} ./... | tee after
-
-      - name: Run benchmark for base code
-        run: |
+          go test -c -o after.test .
           git fetch --quiet origin master ${{ github.event.pull_request.base.sha }}
-          git reset --quiet --hard ${{ github.event.pull_request.base.sha }}
-          go test -run ^$ -bench=. -benchmem -count=${{ env.BENCH_COUNT }} ./... | tee before
+          git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          go test -c -o before.test .
+          git checkout --quiet ${{ github.sha }}
+
+      - name: Run benchmarks
+        run: |
+          for _ in $(seq ${{ env.BENCH_COUNT }}); do
+            ./after.test -test.run='^$' -test.bench=. -test.benchmem -test.benchtime=100ms | tee -a after
+            ./before.test -test.run='^$' -test.bench=. -test.benchmem -test.benchtime=100ms | tee -a before
+          done
 
       - name: Compare benchmarks
         id: bench

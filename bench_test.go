@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -17,19 +19,43 @@ func BenchmarkFile(b *testing.B) {
 	for _, n := range []int{100, 1000} {
 		src, lines := generateSrc(n)
 		b.Run(fmt.Sprintf("%d_LOC", lines), func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(len(src)))
-			for b.Loop() {
-				b.StopTimer()
-				fset := token.NewFileSet()
-				file, err := parser.ParseFile(fset, "", src, parser.ParseComments|parser.SkipObjectResolution)
-				if err != nil {
-					b.Fatal(err)
-				}
-				b.StartTimer()
-				formatter.File(fset, file)
-			}
+			benchmarkSrc(b, formatter, src)
 		})
+	}
+}
+
+func BenchmarkTestdata(b *testing.B) {
+	matches, err := filepath.Glob("testdata/*.input")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	formatter := gocondense.New(gocondense.Config{})
+	for _, inputFile := range matches {
+		src, err := os.ReadFile(inputFile)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.Run(strings.TrimSuffix(filepath.Base(inputFile), ".input"), func(b *testing.B) {
+			benchmarkSrc(b, formatter, src)
+		})
+	}
+}
+
+// benchmarkSrc measures formatter.File on a freshly parsed src each iteration.
+func benchmarkSrc(b *testing.B, formatter *gocondense.Formatter, src []byte) {
+	b.Helper()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(src)))
+	for b.Loop() {
+		b.StopTimer()
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, "", src, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+		formatter.File(fset, file)
 	}
 }
 
