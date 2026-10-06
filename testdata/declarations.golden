@@ -50,3 +50,12 @@ type T int
 type S = string
 
 // Empty var, const, and type groups are also removed.
+
+// Empty groups inside a function body are also removed.
+
+func f() {}
+
+func g() {
+	x := 1
+	_ = x
+}
