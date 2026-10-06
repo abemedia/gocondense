@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,gocognit
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	node := c.Node()
 	if node == nil {
 		return true
@@ -82,13 +82,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,g
 	case *ast.CallExpr:
 		e.condenseCallExpr(n)
 	case *ast.BinaryExpr:
-		// Each precedence-chain collapses atomically from its top; tighter
-		// sub-expressions (e.g. `b*c` in `a + b*c + d`) are their own chain.
-		if p, ok := e.parent(1).(*ast.BinaryExpr); !ok || n.Op.Precedence() > p.Op.Precedence() {
-			if !e.isSingleLine(n) && !e.hasComments(n) {
-				e.condenseNode(n)
-			}
-		}
+		e.condenseBinaryExpr(n)
 	case *ast.SelectorExpr:
 		if !e.isSingleLine(n) && e.isSingleLine(n.X) && !e.hasComments(n) {
 			e.condenseNode(n)
@@ -394,6 +388,33 @@ func (e *condenser) condenseCallExpr(call *ast.CallExpr) {
 
 	if !e.canCondense(call) {
 		e.restoreLines(startLine, startLine+(argEndLine-argStartLine), saved)
+	}
+}
+
+// condenseBinaryExpr collapses a precedence chain atomically from its top when
+// every operand is on a single line. Tighter sub-expressions (e.g. `b*c` in
+// `a + b*c + d`) are their own chain.
+func (e *condenser) condenseBinaryExpr(n *ast.BinaryExpr) {
+	prec := n.Op.Precedence()
+	if p, ok := e.parent(1).(*ast.BinaryExpr); ok && prec <= p.Op.Precedence() {
+		return
+	}
+	if e.isSingleLine(n) || e.hasComments(n) {
+		return
+	}
+	x := ast.Expr(n)
+	for {
+		b, ok := x.(*ast.BinaryExpr)
+		if !ok || b.Op.Precedence() > prec {
+			break
+		}
+		if !e.isSingleLine(b.Y) {
+			return
+		}
+		x = b.X
+	}
+	if e.isSingleLine(x) {
+		e.condenseNode(n)
 	}
 }
 
