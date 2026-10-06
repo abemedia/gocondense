@@ -83,3 +83,23 @@ const (
 
 type (
 )
+
+// Empty groups inside a function body are also removed.
+
+func f() {
+	var (
+	)
+
+	const (
+	)
+
+	type (
+	)
+}
+
+func g() {
+	x := 1
+	var (
+	)
+	_ = x
+}

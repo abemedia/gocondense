@@ -41,7 +41,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,gocognit
 	node := c.Node()
 	if node == nil {
 		return true
@@ -54,7 +54,12 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 
 	switch n := node.(type) {
 	case *ast.GenDecl:
-		if e.simplifyGenDecl(n) {
+		if _, ok := e.parent(1).(*ast.DeclStmt); !ok && e.simplifyGenDecl(n) {
+			c.Delete()
+		}
+	case *ast.DeclStmt:
+		if e.simplifyGenDecl(n.Decl.(*ast.GenDecl)) {
+			e.removeLines(e.line(n.Pos())-1, e.line(n.End()))
 			c.Delete()
 		}
 	case *ast.ParenExpr:
