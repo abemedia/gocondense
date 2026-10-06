@@ -41,4 +41,20 @@ func main() {
 		longVariableNameC +
 		longVariableNameD) +
 		shortE
+
+	// Func literal operand - keep its body multi-line
+	_ = ok && func() bool {
+		x := 1
+		return x > 0
+	}()
+
+	// Keyed literal operand with elements on their own lines - keep multi-line
+	_ = p != nil && *p == Person{
+		Name: "John",
+		Age:  30,
+	}
+
+	// Raw string operand spanning lines - keep multi-line
+	_ = shortA + `multi
+line` + shortB
 }
