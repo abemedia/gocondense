@@ -86,3 +86,33 @@ func withMultilineParamType(
 ) {
 	cb(a, a, a)
 }
+
+// Merged signature line including receiver, name and brace is exactly MaxLen (80).
+func (r *Receiver) MethodMakingTheLineExactlyEightyWide(a int, b string) error {
+	return nil
+}
+
+// Merged signature line including receiver, name and brace is one over MaxLen (81).
+func (r *Receiver) MethodMakingTheLineJustOverEightyWide(
+	a int,
+	b string,
+) error {
+	return nil
+}
+
+// Long name pushes the merged signature line past MaxLen (93 > 80).
+func aVeryLongFunctionNameThatOnItsOwnTakesUpMostOfTheAvailableWidth(
+	a int,
+	b string,
+) error {
+	return nil
+}
+
+// Bodiless declaration has no brace, so its line is exactly MaxLen (80).
+func ThisBodilessDeclarationMakesTheLineExactlyEightyWide(a int, b string) error
+
+// Receiver condenses even when the body has a line over MaxLen.
+func (r *Receiver) Method() {
+	s := "a single string literal long enough to push this line past eighty columns"
+	_ = s
+}
