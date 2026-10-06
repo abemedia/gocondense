@@ -19,6 +19,19 @@ func main() {
 	_ = (*string)(nil)
 	_ = (chan int)(nil)
 	_ = (func())(nil)
+	_ = []int(nil)
+	_ = map[func()]int(nil)
+
+	// Type conversions to types ending in a func or chan type
+	_ = ([]func())(nil)
+	_ = ([]*func())(nil)
+	_ = ([2]func())(nil)
+	_ = (map[string]func())(nil)
+	_ = ([]func() int)(nil)
+	_ = ([]chan int)(nil)
+	for _, f := range ([]*func())(fs) {
+		_ = f
+	}
 
 	// Pointer dereference
 	_ = *x

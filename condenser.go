@@ -141,10 +141,23 @@ func (e *condenser) simplifyGenDecl(decl *ast.GenDecl) bool {
 // Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool {
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
 	switch paren.X.(type) {
-	case *ast.ChanType, *ast.FuncType:
-		return false
+	case *ast.ArrayType, *ast.MapType, *ast.ChanType, *ast.FuncType:
+		for typ := paren.X; ; {
+			switch t := typ.(type) {
+			case *ast.ChanType, *ast.FuncType:
+				return false
+			case *ast.ArrayType:
+				typ = t.Elt
+			case *ast.MapType:
+				typ = t.Value
+			case *ast.StarExpr:
+				typ = t.X
+			default:
+				return true
+			}
+		}
 	case *ast.StarExpr:
 		switch e.parent(1).(type) {
 		case *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.SliceExpr, *ast.CallExpr, *ast.TypeAssertExpr:
