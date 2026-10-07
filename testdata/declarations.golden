@@ -39,6 +39,10 @@ type z struct {
 	X int
 }
 
+var alpha,
+	beta,
+	gamma = 1, 2, 3
+
 // Parentheses are also removed from var, const, and type groups.
 
 var x = 1

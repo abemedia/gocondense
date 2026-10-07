@@ -94,7 +94,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 		}
 	case *ast.ValueSpec:
 		if len(n.Values) > 0 {
-			start := n.Pos()
+			start := n.Names[len(n.Names)-1].End()
 			if n.Type != nil {
 				start = n.Type.End()
 			}
