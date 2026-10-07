@@ -221,7 +221,7 @@ func hasExposedCompositeLit(expr ast.Expr) bool {
 // condenseFieldList trims blank lines in a field list and, for type params
 // and function params/results/receivers, attempts to collapse it onto a
 // single line, merging adjacent fields with the same type.
-func (e *condenser) condenseFieldList(list *ast.FieldList) {
+func (e *condenser) condenseFieldList(list *ast.FieldList) { //nolint:funlen
 	if !list.Opening.IsValid() {
 		return
 	}
@@ -266,17 +266,33 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 	// For a declaration, measure the whole signature (without doc or body)
 	// since the receiver and name share the line.
 	node := e.parent(1)
-	decl, ok := node.(*ast.FuncDecl)
-	if !ok {
-		decl, ok = e.parent(2).(*ast.FuncDecl)
+	if decl, ok := e.parent(2).(*ast.FuncDecl); ok {
+		node = decl
 	}
-	if ok {
-		sig := *decl
+	switch p := node.(type) {
+	case *ast.FuncDecl:
+		sig := *p
 		sig.Doc = nil
-		if decl.Body != nil {
-			sig.Body = &ast.BlockStmt{Lbrace: decl.Body.Lbrace, Rbrace: decl.Body.Rbrace}
+		if p.Body != nil {
+			sig.Body = &ast.BlockStmt{Lbrace: p.Body.Lbrace, Rbrace: p.Body.Rbrace}
 		}
 		node = &sig
+	case *ast.TypeSpec:
+		spec := *p
+		spec.Doc, spec.Comment = nil, nil
+		switch t := p.Type.(type) {
+		case *ast.StructType:
+			spec.Type = &ast.StructType{
+				Struct: t.Struct,
+				Fields: &ast.FieldList{Opening: t.Fields.Opening, Closing: t.Fields.Closing},
+			}
+		case *ast.InterfaceType:
+			spec.Type = &ast.InterfaceType{
+				Interface: t.Interface,
+				Methods:   &ast.FieldList{Opening: t.Methods.Opening, Closing: t.Methods.Closing},
+			}
+		}
+		node = &spec
 	}
 	if !e.canCondense(node) {
 		e.restoreLines(startLine, startLine, savedLines)

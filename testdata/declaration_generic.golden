@@ -10,4 +10,25 @@ type GenericInterface[T any, U comparable] interface {
 	Method(T) U
 }
 
+type GenericAlias[T any] = map[string]T
+
+// Lines in the body do not affect the type parameters.
+
+type GenericStructLongTag[T any] struct {
+	Data T `json:"data" some:"long struct tag that pushes this line past eighty columns"`
+}
+
+type GenericInterfaceLongMethod[T any] interface {
+	MethodWithALongName(longArgAlphaBravo int, longArgCharlieDelta string, longArgEchoFoxtrot T) error
+}
+
+// The declaration line itself must still fit.
+
+type GenericStructWhoseTypeParametersDoNotFitOnOneLine[
+	T any,
+	U comparable,
+] struct {
+	Field T
+}
+
 func main() {}
