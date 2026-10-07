@@ -1,0 +1,388 @@
+package main
+
+// Call arguments: 8+72=80 fits.
+func callArgs() {
+	outer(
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		),
+	)
+}
+
+// Call arguments: 12+72=84 does not fit.
+func callArgsDeeper() {
+	if true {
+		outer(
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			),
+		)
+	}
+}
+
+// Literal elements: 8+72=80 fits.
+func literalElements() {
+	_ = []int{
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		),
+	}
+}
+
+// Literal elements: 12+72=84 does not fit.
+func literalElementsDeeper() {
+	if true {
+		_ = []int{
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			),
+		}
+	}
+}
+
+// Key-value element, value after the key on the element's line: 4+3+72=79 fits.
+var _ = map[int]int{
+	0: processItem(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	),
+}
+
+// Key-value element, value after the key on the element's line: 8+3+72=83 does not fit.
+func keyValueDeeper() {
+	_ = map[int]int{
+		0: processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		),
+	}
+}
+
+// Field list, a func type as a struct field's type: 8+2+68=78 fits.
+func fieldList() {
+	var _ struct {
+		F func(
+			longArgAlphaBravo int,
+			longArgCharlieDelta int,
+			longArgEchoFoxtrot int,
+		)
+	}
+}
+
+// Field list, a func type as a struct field's type: 12+2+68=82 does not fit.
+func fieldListDeeper() {
+	if true {
+		var _ struct {
+			F func(
+				longArgAlphaBravo int,
+				longArgCharlieDelta int,
+				longArgEchoFoxtrot int,
+			)
+		}
+	}
+}
+
+// Declaration group: 4+4+71=79 fits.
+var (
+	_ = 0
+	x = processItem(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	)
+)
+
+// Declaration group: 8+4+71=83 does not fit.
+func declGroupDeeper() {
+	var (
+		_ = 0
+		x = processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	)
+	_ = x
+}
+
+// Value continuation in a multi-value spec: 8+71=79 fits.
+var (
+	_    = 0
+	y, z = longArgAlphaBravo,
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+)
+
+// Value continuation in a multi-value spec: 12+71=83 does not fit.
+func valueContinuationDeeper() {
+	var (
+		_    = 0
+		y, z = longArgAlphaBravo,
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+	)
+	_, _ = y, z
+}
+
+// Assignment continuation: 8+71=79 fits, then joins to the operator at 4+5+71=80.
+func assignContinuation() {
+	x :=
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	_ = x
+}
+
+// Assignment continuation: 12+71=83 does not fit.
+func assignContinuationDeeper() {
+	if true {
+		x :=
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		_ = x
+	}
+}
+
+// Return results: 8+71=79 fits.
+func returnResults() (int, int) {
+	return longArgAlphaBravo,
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+}
+
+// Return results: 12+71=83 does not fit.
+func returnResultsDeeper() (int, int) {
+	if true {
+		return longArgAlphaBravo,
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+	}
+	return 0, 0
+}
+
+// Binary operand: 8+71=79 fits; the chain itself does not.
+func binaryOperand() {
+	x := longArgAlphaBravo +
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	_ = x
+}
+
+// Binary operand: 12+71=83 does not fit.
+func binaryOperandDeeper() {
+	if true {
+		x := longArgAlphaBravo +
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		_ = x
+	}
+}
+
+// Arguments of a call whose callee breaks after its dot are measured at the
+// indent they have once the chain collapses: 8+72=80 fits.
+func dotBreak() {
+	_ = obj.
+		Method(
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			),
+		)
+}
+
+// Arguments of a call whose callee breaks after its dot: 12+72=84 does not fit.
+func dotBreakDeeper() {
+	if true {
+		_ = obj.
+			Method(
+				processItem(
+					longArgAlphaBravo,
+					longArgCharlieDelta,
+					longArgEchoFoxtrot,
+				),
+			)
+	}
+}
+
+// Arguments of a call chained onto a multi-line call in a broken chain are
+// measured at the indent they have once the chain collapses: 8+72=80 fits.
+func chainedCall() {
+	_ = obj.
+		Method(
+			longArgAlphaBravo,
+		).Other(
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		),
+	)
+}
+
+// Arguments of a call chained onto a multi-line call in a broken chain: 12+72=84 does not fit.
+func chainedCallDeeper() {
+	if true {
+		_ = obj.
+			Method(
+				longArgAlphaBravo,
+			).Other(
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			),
+		)
+	}
+}
+
+// Type arguments, a func type as a type argument: 8+71+1=80 fits.
+func typeArgs() {
+	_ = Pair[
+		func(
+			longArgAlphaBravo int,
+			longArgCharlieDelta int,
+			longArgGolfHotelIndia int,
+		),
+		int,
+	]{}
+}
+
+// Type arguments, a func type as a type argument: 12+71+1=84 does not fit.
+func typeArgsDeeper() {
+	if true {
+		_ = Pair[
+			func(
+				longArgAlphaBravo int,
+				longArgCharlieDelta int,
+				longArgGolfHotelIndia int,
+			),
+			int,
+		]{}
+	}
+}
+
+// Case bodies are one deeper than the switch or select, not two: 8+71=79 fits.
+func caseBody(ch chan int) {
+	switch {
+	case true:
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	}
+	select {
+	case <-ch:
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	}
+}
+
+// Case bodies: 12+71=83 does not fit.
+func caseBodyDeeper(ch chan int) {
+	if true {
+		switch {
+		case true:
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		}
+		select {
+		case <-ch:
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		}
+	}
+}
+
+// Block of a func literal that is itself on a continuation line: 8+71=79 fits.
+var _ = outer(
+	func() {
+		processItem(
+			longArgAlphaBravo,
+			longArgCharlieDelta,
+			longArgEchoFoxtrot,
+		)
+	},
+	longArgAlphaBravo,
+)
+
+// Block of a func literal that is itself on a continuation line: 12+71=83 does not fit.
+func funcLitContinuationDeeper() {
+	outer(
+		func() {
+			processItem(
+				longArgAlphaBravo,
+				longArgCharlieDelta,
+				longArgEchoFoxtrot,
+			)
+		},
+		longArgAlphaBravo,
+	)
+}
+
+// Unindented source is measured at the printed indent: 8+71=79 fits.
+func unindented() {
+if true {
+processItem(
+longArgAlphaBravo,
+longArgCharlieDelta,
+longArgEchoFoxtrot,
+)
+}
+}
+
+// Unindented source is measured at the printed indent: 12+71=83 does not fit.
+func unindentedDeeper() {
+if true {
+if true {
+processItem(
+longArgAlphaBravo,
+longArgCharlieDelta,
+longArgEchoFoxtrot,
+)
+}
+}
+}

@@ -13,43 +13,28 @@ import (
 
 // condenser implements AST traversal callbacks that simplify and condense nodes.
 type condenser struct {
-	maxLen      int
-	tabWidth    int
-	fset        *token.FileSet
-	file        *ast.File
-	tokenFile   *token.File
-	buf         *bytes.Buffer
-	parents     []ast.Node // stack of ancestor nodes for parent-walk
-	indentLevel int        // current nesting depth (blocks, cases)
+	maxLen    int
+	tabWidth  int
+	fset      *token.FileSet
+	file      *ast.File
+	tokenFile *token.File
+	buf       *bytes.Buffer
+	parents   []ast.Node // stack of ancestor nodes for parent-walk
 }
 
-// applyPre tracks parent nodes and indentation level before visiting children.
+// applyPre tracks parent nodes before visiting children.
 func (e *condenser) applyPre(c *astutil.Cursor) bool {
-	node := c.Node()
-	if node == nil {
-		return true
+	if node := c.Node(); node != nil {
+		e.parents = append(e.parents, node)
 	}
-
-	e.parents = append(e.parents, node)
-
-	switch node.(type) {
-	case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause:
-		e.indentLevel++
-	}
-
 	return true
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen,gocognit
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	node := c.Node()
 	if node == nil {
 		return true
-	}
-
-	switch node.(type) {
-	case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause:
-		e.indentLevel--
 	}
 
 	switch n := node.(type) {
@@ -621,25 +606,34 @@ func (e *condenser) canCondense(node ast.Node) bool {
 	return true
 }
 
-// startColumn returns the visual column where pos begins on its line.
-// It walks up the parent stack to find the topmost ancestor on the same line,
-// then computes: indentLevel * tabWidth + byte distance from ancestor to pos.
-// ancestor.Pos() is after leading tabs, so the byte distance is pure non-tab code.
+// startColumn returns the visual column where pos begins on its printed line.
+// The indent is derived from the enclosing constructs rather than read from
+// the source, which may not be formatted yet.
 func (e *condenser) startColumn(pos token.Pos) int {
-	line := e.line(pos)
-	var ancestor token.Pos
-	for _, p := range slices.Backward(e.parents) {
-		if e.line(p.Pos()) != line {
-			break
+	start := e.tokenFile.LineStart(e.line(pos))
+	lineStart, first, indent := start, pos, 0
+	for i, p := range slices.Backward(e.parents) {
+		if p.Pos() >= lineStart {
+			if lineStart == start {
+				first = p.Pos()
+			}
+			continue
 		}
-		ancestor = p.Pos()
+		switch p.(type) {
+		case *ast.CallExpr, *ast.CompositeLit, *ast.FieldList, *ast.IndexExpr, *ast.IndexListExpr,
+			*ast.GenDecl, *ast.CaseClause, *ast.CommClause,
+			*ast.BinaryExpr, *ast.AssignStmt, *ast.ValueSpec, *ast.ReturnStmt:
+			indent++
+		case *ast.BlockStmt:
+			switch e.parents[i-1].(type) {
+			case *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+			default:
+				indent++
+			}
+		}
+		lineStart = e.tokenFile.LineStart(e.line(p.Pos()))
 	}
-
-	col := e.indentLevel * e.tabWidth
-	if ancestor.IsValid() {
-		col += int(pos - ancestor)
-	}
-	return col
+	return int(pos-first) + indent*e.tabWidth
 }
 
 // condenseNode attempts to condense a node by removing lines between its positions.
