@@ -277,9 +277,23 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) {
 	e.removeLines(startLine, endLine)
 	mergeFields(list)
 
-	// format.Node can't render a standalone FieldList, so verify against
-	// the parent node which IS renderable.
-	if !e.canCondense(e.parent(1)) {
+	// A FieldList can't be printed on its own, so measure its parent.
+	// For a declaration, measure the whole signature (without doc or body)
+	// since the receiver and name share the line.
+	node := e.parent(1)
+	decl, ok := node.(*ast.FuncDecl)
+	if !ok {
+		decl, ok = e.parent(2).(*ast.FuncDecl)
+	}
+	if ok {
+		sig := *decl
+		sig.Doc = nil
+		if decl.Body != nil {
+			sig.Body = &ast.BlockStmt{Lbrace: decl.Body.Lbrace, Rbrace: decl.Body.Rbrace}
+		}
+		node = &sig
+	}
+	if !e.canCondense(node) {
 		e.restoreLines(startLine, startLine, savedLines)
 		list.List = savedFields
 		for i, f := range savedFields {
