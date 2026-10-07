@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.2](https://github.com/abemedia/gocondense/compare/v0.4.1...v0.4.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* condense type parameters regardless of long lines in the type body ([#145](https://github.com/abemedia/gocondense/issues/145)) ([9fe9d0e](https://github.com/abemedia/gocondense/commit/9fe9d0e43c681744af081dd46f2ab24692a7b8f9))
+* keep channel receives when simplifying s[:len(s)] ([#137](https://github.com/abemedia/gocondense/issues/137)) ([ce322b7](https://github.com/abemedia/gocondense/commit/ce322b764a3fe82974021ff68123079584385ce1))
+* keep multi-line name lists in untyped var specs intact ([#144](https://github.com/abemedia/gocondense/issues/144)) ([9f618d8](https://github.com/abemedia/gocondense/commit/9f618d87e7e3844fd6731d6832d80aa35e64b15b))
+* keep multi-line operands when condensing binary expression chains ([#138](https://github.com/abemedia/gocondense/issues/138)) ([e126917](https://github.com/abemedia/gocondense/commit/e126917881a70f06f4faaa4fe82847bc33e4a514))
+* keep parens around conversions to types ending in a func or chan type ([#139](https://github.com/abemedia/gocondense/issues/139)) ([8706018](https://github.com/abemedia/gocondense/commit/8706018fbd5ad6151f574bd0c585f7a56b7cbde9))
+* measure function signatures with their receiver and name ([#142](https://github.com/abemedia/gocondense/issues/142)) ([ce3c3b7](https://github.com/abemedia/gocondense/commit/ce3c3b705345f6066ee0051e50230f5747fb1d38))
+* measure width with one indent per construct the printer breaks ([#143](https://github.com/abemedia/gocondense/issues/143)) ([de0d890](https://github.com/abemedia/gocondense/commit/de0d89021ab30599abefe61a955019fd9d2521e6))
+* remove empty declaration groups inside function bodies instead of panicking ([#140](https://github.com/abemedia/gocondense/issues/140)) ([8f0d668](https://github.com/abemedia/gocondense/commit/8f0d6687e57a9bd7925b42dc53d4b880fb8adeb9))
+
+
+### Performance Improvements
+
+* skip line-length check for calls already condensed around a trailing argument ([#133](https://github.com/abemedia/gocondense/issues/133)) ([6070bc8](https://github.com/abemedia/gocondense/commit/6070bc84d3c68bad3ee7b74102b635a005fa4ce8))
+
 ## [0.4.1](https://github.com/abemedia/gocondense/compare/v0.4.0...v0.4.1) (2026-05-25)
 
 
