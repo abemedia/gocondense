@@ -24,3 +24,44 @@ func parentContext() {
 	)
 	_ = result
 }
+
+// Operator join: the value is measured together with the operator line.
+// "_ = " is 4, so 4+4+72=80 fits; "result := " is 10, so 4+10+72=86 does not.
+func operatorJoin() {
+	_ = processItems(longArgAlphaBravo, longArgCharlieDelta, longArgEchoFoxtrot)
+	result := processItems(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	)
+	_ = result
+}
+
+// Var spec: "var _ = " is 8, so 80 fits; "var result = " is 13, so 85 does not.
+var _ = processItems(longArgAlphaBravo, longArgCharlieDelta, longArgEchoFoxtrot)
+
+var result = processItems(
+	longArgAlphaBravo,
+	longArgCharlieDelta,
+	longArgEchoFoxtrot,
+)
+
+// Typed var spec: "var _ T = " is 10, so 82 does not fit.
+var _ T = processItems(
+	longArgAlphaBravo,
+	longArgCharlieDelta,
+	longArgEchoFoxtrot,
+)
+
+// Key-value: "0: " is 3, so 4+3+72=79 fits; "100: " is 5, so 81 does not.
+var _ = map[int]int{
+	0: processItems(longArgAlphaBravo, longArgCharlieDelta, longArgEchoFoxtrot),
+}
+
+var _ = map[int]int{
+	100: processItems(
+		longArgAlphaBravo,
+		longArgCharlieDelta,
+		longArgEchoFoxtrot,
+	),
+}

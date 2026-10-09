@@ -627,13 +627,40 @@ func (e *condenser) canCondense(node ast.Node) bool {
 // the source, which may not be formatted yet.
 func (e *condenser) startColumn(pos token.Pos) int {
 	start := e.tokenFile.LineStart(e.line(pos))
-	lineStart, first, indent := start, pos, 0
+	lineStart, first, indent, col := start, pos, 0, 0
 	for i, p := range slices.Backward(e.parents) {
 		if p.Pos() >= lineStart {
 			if lineStart == start {
 				first = p.Pos()
 			}
 			continue
+		}
+		if lineStart == start {
+			var value, from token.Pos
+			var prefix int
+			switch p := p.(type) {
+			case *ast.AssignStmt:
+				value, from = p.Rhs[0].Pos(), p.TokPos
+				prefix = int(p.TokPos-p.Pos()) + len(p.Tok.String()) + 1
+			case *ast.ValueSpec:
+				if len(p.Values) > 0 {
+					value, from = p.Values[0].Pos(), p.Names[len(p.Names)-1].End()
+					if p.Type != nil {
+						from = p.Type.End()
+					}
+					prefix = int(from-p.Pos()) + 3
+				}
+			case *ast.KeyValueExpr:
+				value, from = p.Value.Pos(), p.Colon
+				prefix = int(p.Colon-p.Pos()) + 2
+			}
+			if value == first && !e.hasCommentsInRange(from, value) {
+				col = int(pos-first) + prefix
+				pos, first = p.Pos(), p.Pos()
+				start = e.tokenFile.LineStart(e.line(pos))
+				lineStart = start
+				continue
+			}
 		}
 		switch p.(type) {
 		case *ast.CallExpr, *ast.CompositeLit, *ast.FieldList, *ast.IndexExpr, *ast.IndexListExpr,
@@ -649,7 +676,7 @@ func (e *condenser) startColumn(pos token.Pos) int {
 		}
 		lineStart = e.tokenFile.LineStart(e.line(p.Pos()))
 	}
-	return int(pos-first) + indent*e.tabWidth
+	return col + int(pos-first) + indent*e.tabWidth
 }
 
 // condenseNode attempts to condense a node by removing lines between its positions.
