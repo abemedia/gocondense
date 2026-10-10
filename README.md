@@ -10,7 +10,8 @@
 A Go source code formatter that condenses multi-line constructs onto single
 lines where they fit, reducing vertical noise while preserving readability.  
 All transformations are line-length aware (default 80 columns), idempotent, and
-preserve all comments.
+preserve all comments. gocondense is a superset of gofmt, so running gofmt
+afterwards changes nothing.
 
 ## Installation
 
@@ -517,7 +518,16 @@ let g:go_fmt_command = "gocondense"
 Without vim-go, format on save can be configured with an autocommand:
 
 ```vim
-autocmd BufWritePre *.go silent execute '%!gocondense'
+function! s:gocondense() abort
+  let l:view = winsaveview()
+  silent execute '%!gocondense'
+  if v:shell_error
+    silent undo
+  endif
+  call winrestview(l:view)
+endfunction
+
+autocmd BufWritePre *.go call s:gocondense()
 ```
 
 ### Neovim
