@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/abemedia/gocondense/compare/v0.4.2...v0.4.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* measure values joined onto their operator line with the prefix included ([#146](https://github.com/abemedia/gocondense/issues/146)) ([18e3cdf](https://github.com/abemedia/gocondense/commit/18e3cdf25162fb8e8a5a255c499f21ecb69ecff2))
+
 ## [0.4.2](https://github.com/abemedia/gocondense/compare/v0.4.1...v0.4.2) (2026-10-07)
 
 
