@@ -5,7 +5,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/abemedia/gocondense.svg)](https://pkg.go.dev/github.com/abemedia/gocondense)
 [![Codecov](https://codecov.io/gh/abemedia/gocondense/branch/master/graph/badge.svg)](https://codecov.io/gh/abemedia/gocondense)
 [![CI](https://github.com/abemedia/gocondense/actions/workflows/ci.yml/badge.svg)](https://github.com/abemedia/gocondense/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/abemedia/gocondense)](https://goreportcard.com/report/github.com/abemedia/gocondense)
 
 A Go source code formatter that condenses multi-line constructs onto single
 lines where they fit, reducing vertical noise while preserving readability.  
