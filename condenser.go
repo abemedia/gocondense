@@ -54,11 +54,11 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 	case *ast.FieldList:
 		e.condenseFieldList(n)
 	case *ast.BlockStmt:
-		e.trim(n.Lbrace, n.Rbrace, n.List)
+		trim(e, n.Lbrace, n.Rbrace, n.List)
 	case *ast.CaseClause:
-		e.trimTop(n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.CommClause:
-		e.trimTop(n.Colon, n.End(), n.Body)
+		trimTop(e, n.Colon, n.End(), n.Body)
 	case *ast.UnaryExpr:
 		if inner, ok := n.X.(*ast.CompositeLit); ok && n.Op == token.AND {
 			expected, ok := e.litElementType(n).(*ast.StarExpr)
@@ -90,7 +90,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 		if !e.hasCommentsInRange(n.TokPos, n.Rhs[0].Pos()) {
 			e.removeLines(e.line(n.TokPos), e.line(n.Rhs[0].Pos()))
 		} else {
-			e.trimTop(n.TokPos, n.End(), n.Rhs)
+			trimTop(e, n.TokPos, n.End(), n.Rhs)
 		}
 	case *ast.ValueSpec:
 		if len(n.Values) > 0 {
@@ -98,7 +98,7 @@ func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
 			if n.Type != nil {
 				start = n.Type.End()
 			}
-			e.trimTop(start, n.End(), n.Values)
+			trimTop(e, start, n.End(), n.Values)
 		}
 	}
 
@@ -114,7 +114,7 @@ func (e *condenser) simplifyGenDecl(decl *ast.GenDecl) bool {
 	switch {
 	case !decl.Lparen.IsValid():
 	case len(decl.Specs) > 1, e.hasComments(decl):
-		e.trim(decl.Lparen, decl.Rparen, decl.Specs)
+		trim(e, decl.Lparen, decl.Rparen, decl.Specs)
 	case decl.Specs != nil:
 		start, end := e.line(decl.Lparen), e.line(decl.Rparen)
 		decl.Lparen, decl.Rparen = token.NoPos, token.NoPos
@@ -226,7 +226,7 @@ func (e *condenser) condenseFieldList(list *ast.FieldList) { //nolint:funlen
 		return
 	}
 
-	e.trim(list.Opening, list.Closing, list.List)
+	trim(e, list.Opening, list.Closing, list.List)
 
 	switch e.parent(1).(type) {
 	case *ast.StructType, *ast.InterfaceType:
@@ -326,7 +326,7 @@ func (e *condenser) condenseCompositeLit(lit *ast.CompositeLit) {
 		}
 	}
 
-	e.trim(lit.Lbrace, lit.Rbrace, lit.Elts)
+	trim(e, lit.Lbrace, lit.Rbrace, lit.Elts)
 	if len(lit.Elts) == 0 || e.isSingleLine(lit) || e.hasComments(lit) {
 		return
 	}
@@ -453,13 +453,13 @@ func (e *condenser) condenseBinaryExpr(n *ast.BinaryExpr) {
 
 // trim removes blank lines between the delimiters and their nearest children,
 // stopping at comments. Empty regions are collapsed.
-func (e *condenser) trim[T ast.Node](start, end token.Pos, children []T) {
+func trim[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	if len(children) == 0 && !e.hasCommentsInRange(start, end) {
 		e.removeLines(e.line(start), e.line(end))
 		return
 	}
 
-	e.trimTop(start, end, children)
+	trimTop(e, start, end, children)
 
 	// Trim blank lines between the closing delimiter and the last child.
 	last := start
@@ -480,7 +480,7 @@ func (e *condenser) trim[T ast.Node](start, end token.Pos, children []T) {
 
 // trimTop removes blank lines between the opening delimiter and the first
 // child, stopping at comments.
-func (e *condenser) trimTop[T ast.Node](start, end token.Pos, children []T) {
+func trimTop[T ast.Node](e *condenser, start, end token.Pos, children []T) {
 	first := end
 	if len(children) > 0 {
 		first = children[0].Pos()
