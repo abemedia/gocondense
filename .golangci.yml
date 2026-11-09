@@ -3,6 +3,7 @@ version: '2'
 linters:
   default: all
   disable:
+    - cyclop
     - depguard
     - err113
     - exhaustive
@@ -11,8 +12,9 @@ linters:
     - forcetypeassert
     - gochecknoglobals
     - gocyclo
-    - gosec
     - godox
+    - gomodguard # deprecated
+    - gosec
     - mnd
     - nlreturn
     - noinlineerr
@@ -23,10 +25,8 @@ linters:
     - wsl
     - wsl_v5
   settings:
-    cyclop:
-      max-complexity: 20
     funlen:
-      # Complexity is already covered by cyclop and gocognit.
+      # Complexity is already covered by gocognit.
       statements: -1
     govet:
       enable-all: true
@@ -41,7 +41,7 @@ linters:
         - name: cognitive-complexity
           disabled: true # covered by gocognit
         - name: cyclomatic
-          disabled: true # covered by cyclop
+          disabled: true
         - name: add-constant
           disabled: true # covered by goconst/mnd
         - name: unnecessary-format

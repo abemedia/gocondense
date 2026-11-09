@@ -31,7 +31,7 @@ func (e *condenser) applyPre(c *astutil.Cursor) bool {
 }
 
 // applyPost performs all condensation work after children have been visited.
-func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:cyclop,funlen
+func (e *condenser) applyPost(c *astutil.Cursor) bool { //nolint:funlen
 	node := c.Node()
 	if node == nil {
 		return true
@@ -131,7 +131,7 @@ func (e *condenser) simplifyGenDecl(decl *ast.GenDecl) bool {
 // Binary/unary parens are only stripped in unambiguous single-value contexts.
 // Parens around channel/func types, pointer derefs before postfix operators,
 // and composite literals in control flow headers are always kept.
-func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool { //nolint:cyclop
+func (e *condenser) canRemoveParens(paren *ast.ParenExpr) bool {
 	switch paren.X.(type) {
 	case *ast.ArrayType, *ast.MapType, *ast.ChanType, *ast.FuncType:
 		for typ := paren.X; ; {
@@ -697,7 +697,7 @@ func (e *condenser) condenseNode(node ast.Node) {
 }
 
 // equalExpr reports whether two AST type expressions are structurally equal.
-func equalExpr(a, b ast.Expr) bool { //nolint:cyclop,gocognit
+func equalExpr(a, b ast.Expr) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
