@@ -52,6 +52,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	maxLen := flags.Int("max-len", 80, "maximum line length before keeping multi-line")
 	tabWidth := flags.Int("tab-width", 4, "width of a tab character for line length calculation")
+	listOnly := flags.Bool("l", false, "list files whose formatting differs")
+	showDiff := flags.Bool("d", false, "display diffs instead of rewriting files")
 
 	flags.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: %s [options] [file|dir|path/...]", args[0])
@@ -82,7 +84,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if flags.NArg() == 0 {
 		return formatStdin(formatter, stdin, stdout, stderr)
 	}
-	return processArgs(formatter, flags.Args(), stderr)
+	return processArgs(formatter, flags.Args(), stdout, stderr, *listOnly, *showDiff)
 }
 
 // formatStdin reads Go source from stdin, formats it, and writes to stdout.
@@ -121,11 +123,17 @@ func formatStdin(formatter *gocondense.Formatter, stdin io.Reader, stdout, stder
 }
 
 // processArgs formats the given file and directory arguments concurrently.
-func processArgs(formatter *gocondense.Formatter, args []string, stderr io.Writer) int {
+func processArgs( //nolint:funlen
+	formatter *gocondense.Formatter,
+	args []string,
+	stdout, stderr io.Writer,
+	listOnly, showDiff bool,
+) int {
 	var (
-		wg        sync.WaitGroup
-		hasErrors atomic.Bool
-		sem       = semaphore.NewWeighted(int64(runtime.NumCPU()))
+		wg         sync.WaitGroup
+		hasErrors  atomic.Bool
+		hasChanged atomic.Bool
+		sem        = semaphore.NewWeighted(int64(runtime.NumCPU()))
 	)
 
 	for _, arg := range args {
@@ -158,8 +166,11 @@ func processArgs(formatter *gocondense.Formatter, args []string, stderr io.Write
 				go func() {
 					defer sem.Release(1)
 					defer wg.Done()
-					if !processFile(formatter, p, skipGenerated, stderr) {
+					switch processFile(formatter, p, skipGenerated, stdout, stderr, listOnly, showDiff) {
+					case resultError:
 						hasErrors.Store(true)
+					case resultChanged:
+						hasChanged.Store(true)
 					}
 				}()
 			}
@@ -174,26 +185,43 @@ func processArgs(formatter *gocondense.Formatter, args []string, stderr io.Write
 	if hasErrors.Load() {
 		return 2
 	}
+	if (listOnly || showDiff) && hasChanged.Load() {
+		return 1
+	}
 	return 0
 }
 
+type result int
+
+const (
+	resultOK      result = iota // no changes needed or file written successfully
+	resultChanged               // file differs (used with -l/-d)
+	resultError                 // an error occurred
+)
+
 // processFile reads, formats, and writes back a single Go file.
-func processFile(formatter *gocondense.Formatter, filename string, skipGenerated bool, stderr io.Writer) bool {
+func processFile(
+	formatter *gocondense.Formatter,
+	filename string,
+	skipGenerated bool,
+	stdout, stderr io.Writer,
+	listOnly, showDiff bool,
+) result {
 	input, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error reading file %s: %v\n", filename, err)
-		return false
+		return resultError
 	}
 
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, input, parserMode)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error parsing file %s: %v\n", filename, err)
-		return false
+		return resultError
 	}
 
 	if skipGenerated && ast.IsGenerated(file) {
-		return true
+		return resultOK
 	}
 
 	formatter.File(fset, file)
@@ -201,21 +229,36 @@ func processFile(formatter *gocondense.Formatter, filename string, skipGenerated
 	var buf bytes.Buffer
 	if err := goformat.Node(&buf, fset, file); err != nil {
 		fmt.Fprintf(stderr, "Error formatting file %s: %v\n", filename, err)
-		return false
+		return resultError
 	}
 	output := buf.Bytes()
 
 	if bytes.Equal(input, output) {
-		return true
+		return resultOK
+	}
+
+	if listOnly {
+		if _, err := fmt.Fprintln(stdout, filename); err != nil {
+			fmt.Fprintf(stderr, "Error writing output: %v\n", err)
+			return resultError
+		}
+		return resultChanged
+	}
+	if showDiff {
+		if _, err := fmt.Fprint(stdout, unifiedDiff(filename, input, output)); err != nil {
+			fmt.Fprintf(stderr, "Error writing output: %v\n", err)
+			return resultError
+		}
+		return resultChanged
 	}
 
 	err = os.WriteFile(filename, output, 0o600)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error writing file %s: %v\n", filename, err)
-		return false
+		return resultError
 	}
 
-	return true
+	return resultOK
 }
 
 // shouldIgnore reports whether dir should be skipped.
