@@ -35,6 +35,8 @@ unless explicitly specified as arguments.
 | ------------- | ----------------------------------------------------------------------- | ------- |
 | `--max-len`   | Maximum line length; constructs exceeding this remain on multiple lines | 80      |
 | `--tab-width` | Tab character width used for line length calculation                    | 4       |
+| `-l`          | List files whose formatting differs (exit 1 if any)                     |         |
+| `-d`          | Display diffs instead of rewriting files (exit 1 if any)                |         |
 
 ## Transformations
 
