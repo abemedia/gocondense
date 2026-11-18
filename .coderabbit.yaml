@@ -1,4 +1,0 @@
-reviews:
-  auto_review:
-    ignore_title_keywords:
-      - "chore(master): release"
